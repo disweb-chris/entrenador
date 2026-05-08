@@ -83,13 +83,13 @@ export const FATIGUE_CONFIG = {
 };
 
 export function getTodayDayKey() {
-  const d = new Date().getDay();
-  const map = { 1: "lunes", 2: "martes", 3: "mierc", 4: "jueves", 5: "viernes" };
-  return map[d] || "lunes";
+  const day = new Date().toLocaleDateString("es-AR", { weekday: "long", timeZone: "America/Argentina/Buenos_Aires" });
+  const map = { "lunes": "lunes", "martes": "martes", "miércoles": "mierc", "jueves": "jueves", "viernes": "viernes" };
+  return map[day] || "lunes";
 }
 
 export function getDateKey(date = new Date()) {
-  return date.toISOString().slice(0, 10);
+  return date.toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
 }
 
 export function makeEmptySet() {
