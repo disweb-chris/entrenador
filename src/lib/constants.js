@@ -82,14 +82,22 @@ export const FATIGUE_CONFIG = {
   5: { bg: "#ef4444", text: "#fff", label: "5", desc: "Al límite" },
 };
 
+export function getArgentinaDate(date = new Date()) {
+  // UTC-3 fixed offset for Argentina
+  const offset = -3 * 60;
+  const local = new Date(date.getTime() + (offset - date.getTimezoneOffset()) * 60000);
+  return local;
+}
+
 export function getTodayDayKey() {
-  const day = new Date().toLocaleDateString("es-AR", { weekday: "long", timeZone: "America/Argentina/Buenos_Aires" });
-  const map = { "lunes": "lunes", "martes": "martes", "miércoles": "mierc", "jueves": "jueves", "viernes": "viernes" };
-  return map[day] || "lunes";
+  const d = getArgentinaDate().getDay();
+  const map = { 1: "lunes", 2: "martes", 3: "mierc", 4: "jueves", 5: "viernes" };
+  return map[d] || "lunes";
 }
 
 export function getDateKey(date = new Date()) {
-  return date.toLocaleDateString("sv-SE", { timeZone: "America/Argentina/Buenos_Aires" });
+  const d = getArgentinaDate(date);
+  return d.toISOString().slice(0, 10);
 }
 
 export function makeEmptySet() {
