@@ -32,6 +32,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   }, [activeDay]);
 
   async function loadDay(dayKey) {
+    console.log('loading:', user.uid, dateKey, dayKey);
     setLoading(true);
     const [sess, last, tgts] = await Promise.all([
       getSession(user.uid, dateKey, dayKey),
