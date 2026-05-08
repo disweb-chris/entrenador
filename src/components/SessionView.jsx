@@ -21,6 +21,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   const [newExType, setNewExType] = useState("isolation");
   const [sessionNotes, setSessionNotes] = useState("");
   const [copied, setCopied] = useState(false);
+  const [activeDateKey, setActiveDateKey] = useState(dateKey);
 
   const timer = useRestTimer();
   const sessionTimer = useSessionTimer();
@@ -32,16 +33,18 @@ export default function SessionView({ user, profile, onSignOut }) {
   }, [activeDay]);
 
   async function loadDay(dayKey) {
-    console.log('loading:', user.uid, dateKey, dayKey);
     setLoading(true);
-    const [sess, last, tgts] = await Promise.all([
-      getSession(user.uid, dateKey, dayKey),
-      getLastSession(user.uid, dayKey, dateKey),
+    // Try today's session first, fall back to most recent for this dayKey
+    let sess = await getSession(user.uid, dateKey, dayKey);
+    if (!sess) sess = await getMostRecentSession(user.uid, dayKey);
+    const [last, tgts] = await Promise.all([
+      getLastSession(user.uid, dayKey, sess?.dateKey || dateKey),
       getTargets(user.uid, getWeekKey()),
     ]);
 
     if (sess) {
       setSession(sess);
+      setActiveDateKey(sess.dateKey || dateKey);
       setSessionNotes(sess.sessionNotes || "");
     } else {
       // Init from defaults
@@ -62,7 +65,7 @@ export default function SessionView({ user, profile, onSignOut }) {
 
   const persist = useCallback(async (newSession) => {
     setSession(newSession);
-    await saveSession(user.uid, dateKey, activeDay, newSession);
+    await saveSession(user.uid, activeDateKey, activeDay, newSession);
   }, [user.uid, dateKey, activeDay]);
 
   function updateExercise(name, data) {

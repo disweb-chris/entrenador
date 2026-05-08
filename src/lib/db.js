@@ -33,6 +33,22 @@ export async function saveSession(uid, dateKey, dayKey, data) {
   );
 }
 
+// ── Most recent session for a dayKey (any date) ──────────────
+export async function getMostRecentSession(uid, dayKey) {
+  const q = query(
+    collection(db, "sessions"),
+    where("uid", "==", uid),
+    where("dayKey", "==", dayKey),
+    orderBy("dateKey", "desc"),
+    limit(1)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return snap.docs[0].data();
+}
+
+// ── Most recent session for a dayKey (any date) ──────────────
+
 // ── Last session for same dayKey (for comparison) ─────────────
 export async function getLastSession(uid, dayKey, beforeDate) {
   const q = query(
