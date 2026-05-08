@@ -4,7 +4,6 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 
-// ── User profile ──────────────────────────────────────────────
 export async function getUserProfile(uid) {
   const snap = await getDoc(doc(db, "users", uid));
   return snap.exists() ? snap.data() : null;
@@ -14,8 +13,6 @@ export async function setUserProfile(uid, data) {
   await setDoc(doc(db, "users", uid), data, { merge: true });
 }
 
-// ── Sessions ──────────────────────────────────────────────────
-// sessionId = uid_dateKey_dayKey  e.g. "abc123_2026-05-05_lunes"
 export function sessionId(uid, dateKey, dayKey) {
   return `${uid}_${dateKey}_${dayKey}`;
 }
@@ -33,23 +30,19 @@ export async function saveSession(uid, dateKey, dayKey, data) {
   );
 }
 
-// ── Most recent session for a dayKey (any date) ──────────────
-export async function getMostRecentSession(uid, dayKey) {
-  const q = query(
-    collection(db, "sessions"),
-    where("uid", "==", uid),
-    where("dayKey", "==", dayKey),
-    orderBy("dateKey", "desc"),
-    limit(1)
-  );
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  return snap.docs[0].data();
+export async function getSessionForDay(uid, dateKey, dayKey) {
+  const todaySnap = await getDoc(doc(db, "sessions", sessionId(uid, dateKey, dayKey)));
+  if (todaySnap.exists()) return todaySnap.data();
+  for (let i = 1; i <= 7; i++) {
+    const d = new Date(dateKey + "T12:00:00");
+    d.setDate(d.getDate() - i);
+    const pastDate = d.toISOString().slice(0, 10);
+    const snap = await getDoc(doc(db, "sessions", sessionId(uid, pastDate, dayKey)));
+    if (snap.exists()) return snap.data();
+  }
+  return null;
 }
 
-// ── Most recent session for a dayKey (any date) ──────────────
-
-// ── Last session for same dayKey (for comparison) ─────────────
 export async function getLastSession(uid, dayKey, beforeDate) {
   const q = query(
     collection(db, "sessions"),
@@ -64,7 +57,6 @@ export async function getLastSession(uid, dayKey, beforeDate) {
   return snap.docs[0].data();
 }
 
-// ── Exercise history for progression chart ────────────────────
 export async function getExerciseHistory(uid, exerciseName, limitN = 10) {
   const q = query(
     collection(db, "sessions"),
@@ -90,7 +82,6 @@ export async function getExerciseHistory(uid, exerciseName, limitN = 10) {
   return results.reverse().slice(-limitN);
 }
 
-// ── Weekly targets ────────────────────────────────────────────
 export async function saveTargets(uid, weekKey, targets) {
   await setDoc(doc(db, "targets", `${uid}_${weekKey}`), { uid, weekKey, targets });
 }
@@ -100,7 +91,6 @@ export async function getTargets(uid, weekKey) {
   return snap.exists() ? snap.data().targets : null;
 }
 
-// ── Rest time preferences per exercise ───────────────────────
 export async function saveRestPrefs(uid, prefs) {
   await setDoc(doc(db, "restprefs", uid), { prefs }, { merge: true });
 }

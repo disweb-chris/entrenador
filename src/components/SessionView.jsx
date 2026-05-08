@@ -34,13 +34,11 @@ export default function SessionView({ user, profile, onSignOut }) {
 
   async function loadDay(dayKey) {
     setLoading(true);
-    // Try today's session first, fall back to most recent for this dayKey
-    let sess = await getSession(user.uid, dateKey, dayKey);
-    if (!sess) sess = await getMostRecentSession(user.uid, dayKey);
-    const [last, tgts] = await Promise.all([
-      getLastSession(user.uid, dayKey, sess?.dateKey || dateKey),
+    const [sess, tgts] = await Promise.all([
+      getSessionForDay(user.uid, dateKey, dayKey),
       getTargets(user.uid, getWeekKey()),
     ]);
+    const last = await getLastSession(user.uid, dayKey, sess?.dateKey || dateKey);
 
     if (sess) {
       setSession(sess);
