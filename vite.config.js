@@ -11,5 +11,11 @@ export default defineConfig({
     commonjsOptions: {
       include: [/firebase/, /node_modules/],
     },
+    rollupOptions: {
+      output: {
+        entryFileNames: `assets/[name]-[hash]-v2.js`,
+        chunkFileNames: `assets/[name]-[hash]-v2.js`,
+      },
+    },
   },
 });
