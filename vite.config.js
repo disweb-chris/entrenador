@@ -7,12 +7,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        entryFileNames: `assets/[name]-[hash]-v3.js`,
-        chunkFileNames: `assets/[name]-[hash]-v3.js`,
-        manualChunks: {
-          "firebase": ["firebase/app", "firebase/auth", "firebase/firestore"],
-          "react-vendor": ["react", "react-dom"],
-        },
+        entryFileNames: `assets/[name]-[hash]-v4.js`,
+        chunkFileNames: `assets/[name]-[hash]-v4.js`,
       },
     },
   },

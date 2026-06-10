@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { DAYS, DEFAULT_EXERCISES, getTodayDayKey, getDateKey, makeEmptySet } from "../lib/constants";
-import { getSession, saveSession, getLastSession, getTargets, getRestPrefs, saveRestPrefs } from "../lib/db";
+import { saveSession, getSessionForDay, getLastSession, getTargets, saveRestPrefs, saveTargets } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
 import ExerciseCard from "./ExerciseCard";
 import RestTimer from "./RestTimer";
 
 export default function SessionView({ user, profile, onSignOut }) {
+  // dateKey SIEMPRE antes de cualquier estado que lo use
+  const dateKey = getDateKey();
+
   const [activeDay, setActiveDay] = useState(getTodayDayKey());
+  const [activeDateKey, setActiveDateKey] = useState(dateKey);
   const [session, setSession] = useState(null);
   const [lastSession, setLastSession] = useState(null);
   const [targets, setTargets] = useState(null);
@@ -21,13 +25,10 @@ export default function SessionView({ user, profile, onSignOut }) {
   const [newExType, setNewExType] = useState("isolation");
   const [sessionNotes, setSessionNotes] = useState("");
   const [copied, setCopied] = useState(false);
-  const [activeDateKey, setActiveDateKey] = useState(dateKey);
 
   const timer = useRestTimer();
   const sessionTimer = useSessionTimer();
-  const dateKey = getDateKey();
 
-  // Load session data
   useEffect(() => {
     loadDay(activeDay);
   }, [activeDay]);
@@ -45,14 +46,13 @@ export default function SessionView({ user, profile, onSignOut }) {
       setActiveDateKey(sess.dateKey || dateKey);
       setSessionNotes(sess.sessionNotes || "");
     } else {
-      // Init from defaults
       const defaults = DEFAULT_EXERCISES[dayKey] || [];
       const exercises = {};
       defaults.forEach(ex => {
         exercises[ex.name] = { type: ex.type, sets: [makeEmptySet()], notes: "", restTime: null };
       });
-      const newSess = { exercises, sessionNotes: "" };
-      setSession(newSess);
+      setSession({ exercises, sessionNotes: "" });
+      setActiveDateKey(dateKey);
       setSessionNotes("");
     }
 
@@ -64,31 +64,28 @@ export default function SessionView({ user, profile, onSignOut }) {
   const persist = useCallback(async (newSession) => {
     setSession(newSession);
     await saveSession(user.uid, activeDateKey, activeDay, newSession);
-  }, [user.uid, dateKey, activeDay]);
+  }, [user.uid, activeDateKey, activeDay]);
 
   function updateExercise(name, data) {
-    const updated = { ...session, exercises: { ...session.exercises, [name]: data } };
-    persist(updated);
+    persist({ ...session, exercises: { ...session.exercises, [name]: data } });
   }
 
   function addExercise() {
     if (!newExName.trim()) return;
-    const updated = {
+    persist({
       ...session,
       exercises: {
         ...session.exercises,
         [newExName.trim()]: { type: newExType, sets: [makeEmptySet()], notes: "", restTime: null },
       },
-    };
-    persist(updated);
+    });
     setNewExName("");
     setShowAddExercise(false);
   }
 
-  function handleStartRest(seconds, exName, exType) {
+  function handleStartRest(seconds, exName) {
     if (!sessionTimer.running) sessionTimer.startSession();
     timer.start(seconds);
-    // Save rest time preference for this exercise
     saveRestPrefs(user.uid, { [exName]: seconds });
   }
 
@@ -96,7 +93,6 @@ export default function SessionView({ user, profile, onSignOut }) {
     timer.start(Math.max(5, timer.remaining + delta));
   }
 
-  // Stats
   const stats = (() => {
     if (!session) return { totalSets: 0, doneSets: 0, totalVol: 0, pct: 0 };
     let totalSets = 0, doneSets = 0, totalVol = 0;
@@ -118,7 +114,7 @@ export default function SessionView({ user, profile, onSignOut }) {
       session,
       lastSession,
       dayKey: activeDay,
-      dateKey,
+      dateKey: activeDateKey,
       sessionDuration: sessionTimer.formatted,
       userName: profile?.name || user.email,
     });
@@ -138,13 +134,10 @@ export default function SessionView({ user, profile, onSignOut }) {
     try {
       const parsed = JSON.parse(targetInput);
       if (!parsed.targets) throw new Error("Formato inválido");
-      // Save targets
-      import("../lib/db").then(({ saveTargets }) => {
-        saveTargets(user.uid, parsed.semana || getWeekKey(), parsed.targets);
-        setTargets(parsed.targets);
-        setTargetInput("");
-        setView("session");
-      });
+      saveTargets(user.uid, parsed.semana || getWeekKey(), parsed.targets);
+      setTargets(parsed.targets);
+      setTargetInput("");
+      setView("session");
     } catch (e) {
       setTargetError("JSON inválido. Revisá el formato.");
     }
@@ -164,7 +157,6 @@ export default function SessionView({ user, profile, onSignOut }) {
         input, textarea { box-sizing: border-box; }
       `}</style>
 
-      {/* REST TIMER OVERLAY */}
       <RestTimer timer={timer} onSkip={timer.skip} onAdjust={handleAdjustTimer} />
 
       {/* HEADER */}
@@ -173,24 +165,23 @@ export default function SessionView({ user, profile, onSignOut }) {
           <div>
             <div style={{ fontFamily: "'Bebas Neue'", fontSize: "26px", letterSpacing: "4px", lineHeight: 1 }}>OVERLOAD</div>
             <div style={{ color: "#bbb", fontSize: "10px", letterSpacing: "2px", marginTop: "2px" }}>
-              {profile?.name || user.email} · {new Date().toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
+              {profile?.name || user.email} · {activeDateKey}
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: "20px", color: stats.totalVol > 0 ? "#f0f0f0" : "#222" }}>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: "20px", color: stats.totalVol > 0 ? "#f0f0f0" : "#555" }}>
               {stats.totalVol > 0 ? `${stats.totalVol.toLocaleString()}kg` : "—"}
             </div>
-            <div style={{ fontSize: "10px", color: sessionTimer.running ? "#22c55e" : "#777", letterSpacing: "1px" }}>
+            <div style={{ fontSize: "10px", color: sessionTimer.running ? "#22c55e" : "#bbb", letterSpacing: "1px" }}>
               {sessionTimer.running ? `⏱ ${sessionTimer.formatted}` : "sin iniciar"}
             </div>
           </div>
         </div>
 
-        {/* Progress bar */}
         <div style={{ marginTop: "10px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
             <span style={{ color: "#bbb", fontSize: "10px", letterSpacing: "1px" }}>PROGRESO</span>
-            <span style={{ color: stats.pct === 100 ? "#22c55e" : "#555", fontSize: "10px" }}>
+            <span style={{ color: stats.pct === 100 ? "#22c55e" : "#ccc", fontSize: "10px" }}>
               {stats.doneSets}/{stats.totalSets} · {stats.pct}%
             </span>
           </div>
@@ -213,7 +204,7 @@ export default function SessionView({ user, profile, onSignOut }) {
               padding: "5px 10px", borderRadius: "4px", border: "1px solid",
               borderColor: activeDay === d.key ? "#f0f0f0" : "#1e1e1e",
               background: activeDay === d.key ? "#f0f0f0" : "transparent",
-              color: activeDay === d.key ? "#0a0a0a" : "#555",
+              color: activeDay === d.key ? "#0a0a0a" : "#ccc",
               fontFamily: "'DM Mono'", fontSize: "10px", letterSpacing: "1px",
               cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
             }}>
@@ -226,7 +217,7 @@ export default function SessionView({ user, profile, onSignOut }) {
         </button>
       </div>
 
-      {/* DAY TITLE + VIEW TABS */}
+      {/* DAY TITLE + TABS */}
       <div style={{ padding: "10px 16px 6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <span style={{ fontFamily: "'Bebas Neue'", fontSize: "16px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
@@ -240,7 +231,7 @@ export default function SessionView({ user, profile, onSignOut }) {
                 background: "transparent", border: "none", fontFamily: "'DM Mono'",
                 fontSize: "10px", letterSpacing: "1px", textTransform: "uppercase",
                 cursor: "pointer",
-                color: view === v ? "#f0f0f0" : "#444",
+                color: view === v ? "#f0f0f0" : "#bbb",
                 borderBottom: `2px solid ${view === v ? "#f0f0f0" : "transparent"}`,
                 paddingBottom: "2px",
               }}>
@@ -250,13 +241,12 @@ export default function SessionView({ user, profile, onSignOut }) {
         </div>
       </div>
 
-      {/* MAIN CONTENT */}
+      {/* CONTENT */}
       <div style={{ padding: "6px 16px" }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "60px", color: "#bbb", letterSpacing: "2px" }}>CARGANDO...</div>
         ) : view === "session" ? (
           <>
-            {/* Session notes */}
             <textarea
               placeholder="Notas de la sesión (sueño, energía, contexto general...)"
               value={sessionNotes}
@@ -273,11 +263,6 @@ export default function SessionView({ user, profile, onSignOut }) {
               }}
             />
 
-            {/* Column headers hint */}
-            <div style={{ display: "grid", gridTemplateColumns: "20px 72px 60px 1fr 1fr 20px", gap: "4px", padding: "0 12px 6px", color: "#ccc", fontSize: "9px", letterSpacing: "1px" }}>
-              <div></div><div>PESO</div><div>REPS</div><div>RIR</div><div>FATIGA</div><div></div>
-            </div>
-
             {Object.entries(session?.exercises || {}).map(([name, data]) => (
               <ExerciseCard
                 key={name}
@@ -291,7 +276,6 @@ export default function SessionView({ user, profile, onSignOut }) {
               />
             ))}
 
-            {/* Add exercise */}
             {showAddExercise ? (
               <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "8px", padding: "12px", marginBottom: "8px" }}>
                 <input
@@ -308,9 +292,9 @@ export default function SessionView({ user, profile, onSignOut }) {
                       onClick={() => setNewExType(t)}
                       style={{
                         flex: 1, padding: "6px", border: "1px solid",
-                        borderColor: newExType === t ? "#f0f0f0" : "#777",
+                        borderColor: newExType === t ? "#f0f0f0" : "#333",
                         background: newExType === t ? "#f0f0f0" : "transparent",
-                        color: newExType === t ? "#0a0a0a" : "#555",
+                        color: newExType === t ? "#0a0a0a" : "#ccc",
                         fontFamily: "'DM Mono'", fontSize: "10px", borderRadius: "4px", cursor: "pointer",
                         letterSpacing: "1px",
                       }}>
@@ -319,7 +303,7 @@ export default function SessionView({ user, profile, onSignOut }) {
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={addExercise} style={{ flex: 1, ...actionBtn, background: "#f0f0f0", color: "#0a0a0a" }}>AGREGAR</button>
+                  <button onClick={addExercise} style={{ ...actionBtn, flex: 1, background: "#f0f0f0", color: "#0a0a0a" }}>AGREGAR</button>
                   <button onClick={() => setShowAddExercise(false)} style={{ ...actionBtn, padding: "8px 12px", border: "1px solid #333", color: "#ccc" }}>✕</button>
                 </div>
               </div>
@@ -330,7 +314,6 @@ export default function SessionView({ user, profile, onSignOut }) {
               </button>
             )}
 
-            {/* Session timer controls */}
             <button
               onClick={sessionTimer.running ? sessionTimer.stopSession : sessionTimer.startSession}
               style={{
@@ -353,22 +336,21 @@ export default function SessionView({ user, profile, onSignOut }) {
             </div>
             <pre style={{
               background: "#0f0f0f", border: "1px solid #1e1e1e", borderRadius: "8px",
-              padding: "14px", fontSize: "11px", color: "#bbb", whiteSpace: "pre-wrap",
+              padding: "14px", fontSize: "11px", color: "#ccc", whiteSpace: "pre-wrap",
               lineHeight: "1.6", overflowX: "auto",
             }}>
               {reportText}
             </pre>
           </div>
         ) : (
-          // TARGETS view
           <div>
             {targets && (
               <div style={{ marginBottom: "16px" }}>
                 <div style={{ fontSize: "11px", color: "#ccc", letterSpacing: "1px", marginBottom: "8px" }}>TARGETS ACTUALES</div>
                 {Object.entries(targets).map(([ex, t]) => (
                   <div key={ex} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #1a1a1a", fontSize: "11px" }}>
-                    <span style={{ color: "#bbb" }}>{ex}</span>
-                    <span style={{ color: "#3b82f6" }}>{t.series}×{t.reps}@{t.peso}kg</span>
+                    <span style={{ color: "#ccc" }}>{ex}</span>
+                    <span style={{ color: "#60a5fa" }}>{t.series}×{t.reps}@{t.peso}kg</span>
                   </div>
                 ))}
               </div>
@@ -377,7 +359,7 @@ export default function SessionView({ user, profile, onSignOut }) {
             <textarea
               value={targetInput}
               onChange={e => setTargetInput(e.target.value)}
-              placeholder={`Pegá el JSON de targets:\n{\n  "semana": "2026-W19",\n  "targets": {\n    "Jalón cerrado V": { "series": 3, "reps": 12, "peso": 90 }\n  }\n}`}
+              placeholder={'Pegá el JSON de targets:\n{\n  "semana": "2026-W24",\n  "targets": {\n    "Jalón cerrado V": { "series": 3, "reps": 12, "peso": 90 }\n  }\n}'}
               rows={8}
               style={{ ...inputBase, width: "100%", resize: "vertical", marginBottom: "8px", lineHeight: "1.5" }}
             />
@@ -390,16 +372,15 @@ export default function SessionView({ user, profile, onSignOut }) {
         )}
       </div>
 
-      {/* LEGEND - fixed bottom */}
       {view === "session" && (
         <div style={{
           position: "fixed", bottom: 0, left: 0, right: 0, padding: "8px 16px",
           background: "#0a0a0a", borderTop: "1px solid #1a1a1a",
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
-          <span style={{ fontSize: "9px", color: "#ccc", letterSpacing: "1px" }}>RIR: 0=FALLO · 1=OBJ · 2=OK · 3=LVN · 4+=FÁC</span>
-          <span style={{ fontSize: "9px", color: stats.pct === 100 ? "#22c55e" : "#777", letterSpacing: "1px" }}>
-            {stats.pct === 100 ? "✓ COMPLETO" : `FATIGA: 1=FRESCO · 5=LÍMITE`}
+          <span style={{ fontSize: "9px", color: "#bbb", letterSpacing: "1px" }}>RIR: 0=FALLO · 1=OBJ · 2=OK · 3=LVN · 4+=FÁC</span>
+          <span style={{ fontSize: "9px", color: stats.pct === 100 ? "#22c55e" : "#bbb", letterSpacing: "1px" }}>
+            {stats.pct === 100 ? "✓ COMPLETO" : "FATIGA: 1=FRESCO · 5=LÍMITE"}
           </span>
         </div>
       )}
