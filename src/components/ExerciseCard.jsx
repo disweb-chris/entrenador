@@ -60,7 +60,11 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
             {totalVol > 0 && <span style={{ fontSize: "9px", color: "#bbb" }}>· {totalVol}kg vol</span>}
             {target && (
               <span style={{ fontSize: "9px", color: "#3b82f6", letterSpacing: "0.5px" }}>
-                · Obj: {target.series}×{target.reps}@{target.peso}kg
+                · Obj: {target.series}×
+                {target.reps_por_serie
+                  ? target.reps_por_serie.join("/")
+                  : target.reps}
+                {target.peso != null ? `@${target.peso}kg` : ""}
               </span>
             )}
           </div>
