@@ -35,5 +35,5 @@ jobs:
           server-dir: /public_html/entrenador/
           protocol: ftp
           port: 21
-          security: loose
+          security: strict
           dangerous-clean-slate: true
