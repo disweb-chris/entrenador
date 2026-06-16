@@ -7,7 +7,6 @@ import ExerciseCard from "./ExerciseCard";
 import RestTimer from "./RestTimer";
 
 export default function SessionView({ user, profile, onSignOut }) {
-  // dateKey SIEMPRE antes de cualquier estado que lo use
   const dateKey = getDateKey();
 
   const [activeDay, setActiveDay] = useState(getTodayDayKey());
@@ -16,7 +15,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   const [lastSession, setLastSession] = useState(null);
   const [targets, setTargets] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState("session"); // session | report | targets
+  const [view, setView] = useState("session");
   const [reportText, setReportText] = useState("");
   const [targetInput, setTargetInput] = useState("");
   const [targetError, setTargetError] = useState("");
@@ -148,92 +147,94 @@ export default function SessionView({ user, profile, onSignOut }) {
   return (
     <div style={{
       minHeight: "100vh", background: "#0a0a0a", color: "#f0f0f0",
-      fontFamily: "'DM Mono', monospace", fontSize: "13px", paddingBottom: "80px",
+      fontFamily: "'DM Mono', monospace", fontSize: "15px", paddingBottom: "90px",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-thumb { background: #222; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: #222; }
         input, textarea { box-sizing: border-box; }
+        button { touch-action: manipulation; transition: transform 120ms ease-out; }
+        button:active { transform: scale(0.97); }
       `}</style>
 
       <RestTimer timer={timer} onSkip={timer.skip} onAdjust={handleAdjustTimer} />
 
       {/* HEADER */}
-      <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #1a1a1a" }}>
+      <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #1a1a1a" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: "26px", letterSpacing: "4px", lineHeight: 1 }}>OVERLOAD</div>
-            <div style={{ color: "#bbb", fontSize: "10px", letterSpacing: "2px", marginTop: "2px" }}>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: "38px", letterSpacing: "5px", lineHeight: 1 }}>OVERLOAD</div>
+            <div style={{ color: "#888", fontSize: "13px", letterSpacing: "1px", marginTop: "4px" }}>
               {profile?.name || user.email} · {activeDateKey}
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: "20px", color: stats.totalVol > 0 ? "#f0f0f0" : "#555" }}>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: "28px", color: stats.totalVol > 0 ? "#f0f0f0" : "#444" }}>
               {stats.totalVol > 0 ? `${stats.totalVol.toLocaleString()}kg` : "—"}
             </div>
-            <div style={{ fontSize: "10px", color: sessionTimer.running ? "#22c55e" : "#bbb", letterSpacing: "1px" }}>
+            <div style={{ fontSize: "13px", color: sessionTimer.running ? "#22c55e" : "#888", letterSpacing: "0.5px" }}>
               {sessionTimer.running ? `⏱ ${sessionTimer.formatted}` : "sin iniciar"}
             </div>
           </div>
         </div>
 
-        <div style={{ marginTop: "10px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-            <span style={{ color: "#bbb", fontSize: "10px", letterSpacing: "1px" }}>PROGRESO</span>
-            <span style={{ color: stats.pct === 100 ? "#22c55e" : "#ccc", fontSize: "10px" }}>
+        <div style={{ marginTop: "14px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ color: "#888", fontSize: "12px", letterSpacing: "2px" }}>PROGRESO</span>
+            <span style={{ color: stats.pct === 100 ? "#22c55e" : "#ccc", fontSize: "13px" }}>
               {stats.doneSets}/{stats.totalSets} · {stats.pct}%
             </span>
           </div>
-          <div style={{ height: "2px", background: "#1a1a1a", borderRadius: "2px", overflow: "hidden" }}>
+          <div style={{ height: "5px", background: "#1a1a1a", borderRadius: "3px", overflow: "hidden" }}>
             <div style={{
-              height: "100%", borderRadius: "2px",
+              height: "100%", borderRadius: "3px",
               background: stats.pct === 100 ? "#22c55e" : "linear-gradient(90deg,#3b82f6,#22c55e)",
-              width: `${stats.pct}%`, transition: "width 0.4s",
+              width: `${stats.pct}%`, transition: "width 0.4s ease-out",
             }} />
           </div>
         </div>
       </div>
 
       {/* DAY SELECTOR */}
-      <div style={{ padding: "8px 16px", display: "flex", gap: "6px", overflowX: "auto", borderBottom: "1px solid #1a1a1a" }}>
+      <div style={{ padding: "10px 18px", display: "flex", gap: "8px", overflowX: "auto", borderBottom: "1px solid #1a1a1a" }}>
         {DAYS.map(d => (
           <button key={d.key}
             onClick={() => { setActiveDay(d.key); setView("session"); }}
             style={{
-              padding: "5px 10px", borderRadius: "4px", border: "1px solid",
+              padding: "10px 18px", borderRadius: "6px", border: "1px solid",
               borderColor: activeDay === d.key ? "#f0f0f0" : "#1e1e1e",
               background: activeDay === d.key ? "#f0f0f0" : "transparent",
               color: activeDay === d.key ? "#0a0a0a" : "#ccc",
-              fontFamily: "'DM Mono'", fontSize: "10px", letterSpacing: "1px",
+              fontFamily: "'DM Mono'", fontSize: "13px", letterSpacing: "1px",
               cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
             }}>
             {d.label}
           </button>
         ))}
         <button onClick={onSignOut}
-          style={{ marginLeft: "auto", padding: "5px 10px", background: "transparent", border: "1px solid #1e1e1e", borderRadius: "4px", color: "#bbb", fontFamily: "'DM Mono'", fontSize: "10px", cursor: "pointer", flexShrink: 0 }}>
+          style={{ marginLeft: "auto", padding: "10px 18px", background: "transparent", border: "1px solid #1e1e1e", borderRadius: "6px", color: "#888", fontFamily: "'DM Mono'", fontSize: "13px", cursor: "pointer", flexShrink: 0 }}>
           SALIR
         </button>
       </div>
 
       {/* DAY TITLE + TABS */}
-      <div style={{ padding: "10px 16px 6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ padding: "14px 18px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <span style={{ fontFamily: "'Bebas Neue'", fontSize: "16px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
-          <span style={{ color: "#bbb", fontSize: "10px", marginLeft: "8px", letterSpacing: "1px" }}>{dayInfo?.focus?.toUpperCase()}</span>
+          <span style={{ fontFamily: "'Bebas Neue'", fontSize: "22px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
+          <span style={{ color: "#888", fontSize: "13px", marginLeft: "10px", letterSpacing: "1px" }}>{dayInfo?.focus?.toUpperCase()}</span>
         </div>
-        <div style={{ display: "flex", gap: "12px" }}>
+        <div style={{ display: "flex", gap: "20px" }}>
           {["session", "report", "targets"].map(v => (
             <button key={v}
               onClick={() => { if (v === "report") buildReport(); else setView(v); }}
               style={{
                 background: "transparent", border: "none", fontFamily: "'DM Mono'",
-                fontSize: "10px", letterSpacing: "1px", textTransform: "uppercase",
+                fontSize: "13px", letterSpacing: "1px", textTransform: "uppercase",
                 cursor: "pointer",
-                color: view === v ? "#f0f0f0" : "#bbb",
+                color: view === v ? "#f0f0f0" : "#888",
                 borderBottom: `2px solid ${view === v ? "#f0f0f0" : "transparent"}`,
-                paddingBottom: "2px",
+                paddingBottom: "3px",
               }}>
               {v === "session" ? "HOY" : v === "report" ? "INFORME" : "TARGETS"}
             </button>
@@ -242,13 +243,13 @@ export default function SessionView({ user, profile, onSignOut }) {
       </div>
 
       {/* CONTENT */}
-      <div style={{ padding: "6px 16px" }}>
+      <div style={{ padding: "8px 18px" }}>
         {loading ? (
-          <div style={{ textAlign: "center", padding: "60px", color: "#bbb", letterSpacing: "2px" }}>CARGANDO...</div>
+          <div style={{ textAlign: "center", padding: "60px", color: "#555", letterSpacing: "3px", fontSize: "14px" }}>CARGANDO...</div>
         ) : view === "session" ? (
           <>
             <textarea
-              placeholder="Notas de la sesión (sueño, energía, contexto general...)"
+              placeholder="Notas de la sesión (sueño, energía, contexto...)"
               value={sessionNotes}
               onChange={e => {
                 setSessionNotes(e.target.value);
@@ -256,9 +257,9 @@ export default function SessionView({ user, profile, onSignOut }) {
               }}
               rows={1}
               style={{
-                width: "100%", marginBottom: "10px", background: "#0f0f0f",
-                border: "1px solid #1a1a1a", color: "#ccc", padding: "8px 10px",
-                borderRadius: "6px", fontFamily: "'DM Mono'", fontSize: "11px",
+                width: "100%", marginBottom: "12px", background: "#0f0f0f",
+                border: "1px solid #1a1a1a", color: "#ccc", padding: "12px 14px",
+                borderRadius: "8px", fontFamily: "'DM Mono'", fontSize: "14px",
                 resize: "none", outline: "none",
               }}
             />
@@ -277,25 +278,25 @@ export default function SessionView({ user, profile, onSignOut }) {
             ))}
 
             {showAddExercise ? (
-              <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "8px", padding: "12px", marginBottom: "8px" }}>
+              <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "10px", padding: "16px", marginBottom: "10px" }}>
                 <input
                   placeholder="Nombre del ejercicio"
                   value={newExName}
                   onChange={e => setNewExName(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && addExercise()}
                   autoFocus
-                  style={{ ...inputBase, width: "100%", marginBottom: "8px" }}
+                  style={{ ...inputBase, width: "100%", marginBottom: "10px" }}
                 />
-                <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
                   {["compound", "isolation"].map(t => (
                     <button key={t}
                       onClick={() => setNewExType(t)}
                       style={{
-                        flex: 1, padding: "6px", border: "1px solid",
+                        flex: 1, padding: "12px 8px", border: "1px solid",
                         borderColor: newExType === t ? "#f0f0f0" : "#333",
                         background: newExType === t ? "#f0f0f0" : "transparent",
                         color: newExType === t ? "#0a0a0a" : "#ccc",
-                        fontFamily: "'DM Mono'", fontSize: "10px", borderRadius: "4px", cursor: "pointer",
+                        fontFamily: "'DM Mono'", fontSize: "12px", borderRadius: "6px", cursor: "pointer",
                         letterSpacing: "1px",
                       }}>
                       {t === "compound" ? "COMPUESTO (90s)" : "AISLAMIENTO (60s)"}
@@ -304,12 +305,12 @@ export default function SessionView({ user, profile, onSignOut }) {
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button onClick={addExercise} style={{ ...actionBtn, flex: 1, background: "#f0f0f0", color: "#0a0a0a" }}>AGREGAR</button>
-                  <button onClick={() => setShowAddExercise(false)} style={{ ...actionBtn, padding: "8px 12px", border: "1px solid #333", color: "#ccc" }}>✕</button>
+                  <button onClick={() => setShowAddExercise(false)} style={{ ...actionBtn, padding: "12px 16px", border: "1px solid #333", color: "#ccc" }}>✕</button>
                 </div>
               </div>
             ) : (
               <button onClick={() => setShowAddExercise(true)}
-                style={{ background: "transparent", border: "1px dashed #1e1e1e", color: "#bbb", borderRadius: "6px", padding: "10px", width: "100%", marginBottom: "8px", fontFamily: "'DM Mono'", fontSize: "11px", letterSpacing: "1px", cursor: "pointer" }}>
+                style={{ background: "transparent", border: "1px dashed #1e1e1e", color: "#888", borderRadius: "8px", padding: "16px", width: "100%", marginBottom: "10px", fontFamily: "'DM Mono'", fontSize: "14px", letterSpacing: "1px", cursor: "pointer" }}>
                 + AGREGAR EJERCICIO
               </button>
             )}
@@ -317,27 +318,28 @@ export default function SessionView({ user, profile, onSignOut }) {
             <button
               onClick={sessionTimer.running ? sessionTimer.stopSession : sessionTimer.startSession}
               style={{
-                ...actionBtn, width: "100%", marginBottom: "8px",
+                ...actionBtn, width: "100%", marginBottom: "10px",
                 border: `1px solid ${sessionTimer.running ? "#7f1d1d" : "#222"}`,
                 background: sessionTimer.running ? "#1a0a0a" : "#1a1a1a",
-                color: sessionTimer.running ? "#fca5a5" : "#bbb",
+                color: sessionTimer.running ? "#fca5a5" : "#ccc",
+                padding: "16px",
               }}>
               {sessionTimer.running ? `■ FINALIZAR SESIÓN · ${sessionTimer.formatted}` : "▶ INICIAR SESIÓN"}
             </button>
           </>
         ) : view === "report" ? (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <span style={{ fontSize: "11px", color: "#ccc", letterSpacing: "1px" }}>INFORME LISTO PARA COMPARTIR</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <span style={{ fontSize: "13px", color: "#ccc", letterSpacing: "1px" }}>INFORME</span>
               <button onClick={copyReport}
-                style={{ ...actionBtn, background: copied ? "#22c55e" : "#f0f0f0", color: copied ? "#fff" : "#0a0a0a" }}>
+                style={{ ...actionBtn, background: copied ? "#22c55e" : "#f0f0f0", color: copied ? "#fff" : "#0a0a0a", padding: "10px 22px" }}>
                 {copied ? "✓ COPIADO" : "COPIAR"}
               </button>
             </div>
             <pre style={{
-              background: "#0f0f0f", border: "1px solid #1e1e1e", borderRadius: "8px",
-              padding: "14px", fontSize: "11px", color: "#ccc", whiteSpace: "pre-wrap",
-              lineHeight: "1.6", overflowX: "auto",
+              background: "#0f0f0f", border: "1px solid #1e1e1e", borderRadius: "10px",
+              padding: "16px", fontSize: "13px", color: "#ccc", whiteSpace: "pre-wrap",
+              lineHeight: "1.7", overflowX: "auto",
             }}>
               {reportText}
             </pre>
@@ -345,27 +347,27 @@ export default function SessionView({ user, profile, onSignOut }) {
         ) : (
           <div>
             {targets && (
-              <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "11px", color: "#ccc", letterSpacing: "1px", marginBottom: "8px" }}>TARGETS ACTUALES</div>
+              <div style={{ marginBottom: "20px" }}>
+                <div style={{ fontSize: "13px", color: "#888", letterSpacing: "2px", marginBottom: "10px" }}>TARGETS ACTUALES</div>
                 {Object.entries(targets).map(([ex, t]) => (
-                  <div key={ex} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #1a1a1a", fontSize: "11px" }}>
+                  <div key={ex} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #1a1a1a", fontSize: "14px" }}>
                     <span style={{ color: "#ccc" }}>{ex}</span>
                     <span style={{ color: "#60a5fa" }}>{t.series}×{t.reps}@{t.peso}kg</span>
                   </div>
                 ))}
               </div>
             )}
-            <div style={{ fontSize: "11px", color: "#ccc", letterSpacing: "1px", marginBottom: "8px" }}>IMPORTAR TARGETS</div>
+            <div style={{ fontSize: "13px", color: "#888", letterSpacing: "2px", marginBottom: "10px" }}>IMPORTAR TARGETS</div>
             <textarea
               value={targetInput}
               onChange={e => setTargetInput(e.target.value)}
               placeholder={'Pegá el JSON de targets:\n{\n  "semana": "2026-W24",\n  "targets": {\n    "Jalón cerrado V": { "series": 3, "reps": 12, "peso": 90 }\n  }\n}'}
               rows={8}
-              style={{ ...inputBase, width: "100%", resize: "vertical", marginBottom: "8px", lineHeight: "1.5" }}
+              style={{ ...inputBase, width: "100%", resize: "vertical", marginBottom: "10px", lineHeight: "1.5" }}
             />
-            {targetError && <div style={{ color: "#ef4444", fontSize: "11px", marginBottom: "8px" }}>{targetError}</div>}
+            {targetError && <div style={{ color: "#ef4444", fontSize: "13px", marginBottom: "10px" }}>{targetError}</div>}
             <button onClick={importTargets}
-              style={{ ...actionBtn, background: "#f0f0f0", color: "#0a0a0a", width: "100%" }}>
+              style={{ ...actionBtn, background: "#f0f0f0", color: "#0a0a0a", width: "100%", padding: "16px" }}>
               IMPORTAR
             </button>
           </div>
@@ -374,13 +376,13 @@ export default function SessionView({ user, profile, onSignOut }) {
 
       {view === "session" && (
         <div style={{
-          position: "fixed", bottom: 0, left: 0, right: 0, padding: "8px 16px",
+          position: "fixed", bottom: 0, left: 0, right: 0, padding: "10px 18px",
           background: "#0a0a0a", borderTop: "1px solid #1a1a1a",
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
-          <span style={{ fontSize: "9px", color: "#bbb", letterSpacing: "1px" }}>RIR: 0=FALLO · 1=OBJ · 2=OK · 3=LVN · 4+=FÁC</span>
-          <span style={{ fontSize: "9px", color: stats.pct === 100 ? "#22c55e" : "#bbb", letterSpacing: "1px" }}>
-            {stats.pct === 100 ? "✓ COMPLETO" : "FATIGA: 1=FRESCO · 5=LÍMITE"}
+          <span style={{ fontSize: "11px", color: "#555", letterSpacing: "1px" }}>RIR: 0=FALLO · 1=OBJ · 2=OK · 3=LVN · 4+=FÁC</span>
+          <span style={{ fontSize: "11px", color: stats.pct === 100 ? "#22c55e" : "#555", letterSpacing: "1px" }}>
+            {stats.pct === 100 ? "✓ COMPLETO" : "FAT: 1=FRESCO · 5=LÍMITE"}
           </span>
         </div>
       )}
@@ -390,12 +392,12 @@ export default function SessionView({ user, profile, onSignOut }) {
 
 const inputBase = {
   background: "#0f0f0f", border: "1px solid #1e1e1e", color: "#ccc",
-  padding: "8px 10px", borderRadius: "6px", fontFamily: "'DM Mono'",
-  fontSize: "11px", outline: "none",
+  padding: "12px 14px", borderRadius: "8px", fontFamily: "'DM Mono'",
+  fontSize: "14px", outline: "none",
 };
 
 const actionBtn = {
-  border: "none", borderRadius: "6px", padding: "8px 14px",
-  fontFamily: "'DM Mono'", fontSize: "11px", letterSpacing: "1px",
+  border: "none", borderRadius: "8px", padding: "12px 18px",
+  fontFamily: "'DM Mono'", fontSize: "13px", letterSpacing: "1px",
   cursor: "pointer", background: "transparent",
 };

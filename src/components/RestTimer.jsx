@@ -10,53 +10,51 @@ export default function RestTimer({ timer, onSkip, onAdjust }) {
 
   const color = isDone ? "#22c55e" : isWarning ? "#ef4444" : "#f0f0f0";
 
-  // Arc for circular progress
-  const r = 44;
+  const r = 30;
   const circ = 2 * Math.PI * r;
   const dash = circ - (circ * pct) / 100;
 
   return (
     <div style={{
       position: "fixed", top: "16px", right: "16px", zIndex: 999,
-      background: "#111", border: `1px solid ${isWarning ? "#ef4444" : isDone ? "#22c55e" : "#555"}`,
-      borderRadius: "12px", padding: "12px 16px", minWidth: "140px",
-      boxShadow: `0 0 20px ${isWarning ? "rgba(239,68,68,0.2)" : "rgba(0,0,0,0.5)"}`,
+      background: "#111", border: `1px solid ${isWarning ? "#ef4444" : isDone ? "#22c55e" : "#333"}`,
+      borderRadius: "14px", padding: "14px 18px", minWidth: "168px",
+      boxShadow: `0 0 24px ${isWarning ? "rgba(239,68,68,0.2)" : "rgba(0,0,0,0.6)"}`,
       fontFamily: "'DM Mono', monospace",
       transition: "border-color 0.3s, box-shadow 0.3s",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
         {/* Circular arc */}
-        <svg width="56" height="56" style={{ flexShrink: 0 }}>
-          <circle cx="28" cy="28" r={r} fill="none" stroke="#1e1e1e" strokeWidth="4" />
+        <svg width="72" height="72" style={{ flexShrink: 0 }}>
+          <circle cx="36" cy="36" r={r} fill="none" stroke="#1e1e1e" strokeWidth="4" />
           <circle
-            cx="28" cy="28" r={r} fill="none"
+            cx="36" cy="36" r={r} fill="none"
             stroke={color} strokeWidth="4"
             strokeDasharray={circ}
             strokeDashoffset={dash}
             strokeLinecap="round"
-            transform="rotate(-90 28 28)"
+            transform="rotate(-90 36 36)"
             style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s" }}
           />
-          <text x="28" y="33" textAnchor="middle"
-            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: "16px", fill: color, letterSpacing: "1px" }}>
+          <text x="36" y="42" textAnchor="middle"
+            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: "20px", fill: color, letterSpacing: "1px" }}>
             {isDone ? "GO" : timeStr}
           </text>
         </svg>
 
         <div>
-          <div style={{ fontSize: "10px", color: "#ccc", letterSpacing: "1px", marginBottom: "4px" }}>
+          <div style={{ fontSize: "12px", color: "#ccc", letterSpacing: "1.5px", marginBottom: "8px" }}>
             {isDone ? "¡LISTO!" : isWarning ? "PREPARATE" : "DESCANSO"}
           </div>
 
-          {/* Adjust buttons */}
           {active && (
-            <div style={{ display: "flex", gap: "4px", marginBottom: "4px" }}>
+            <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
               {[-15, +15].map(delta => (
                 <button key={delta}
                   onClick={() => onAdjust(delta)}
                   style={{
-                    background: "#1a1a1a", border: "1px solid #333", color: "#bbb",
-                    borderRadius: "3px", padding: "2px 6px", fontSize: "10px",
+                    background: "#1a1a1a", border: "1px solid #333", color: "#ccc",
+                    borderRadius: "6px", padding: "6px 10px", fontSize: "12px",
                     fontFamily: "'DM Mono'", cursor: "pointer",
                   }}>
                   {delta > 0 ? `+${delta}s` : `${delta}s`}
@@ -68,7 +66,7 @@ export default function RestTimer({ timer, onSkip, onAdjust }) {
           <button onClick={onSkip}
             style={{
               background: "transparent", border: "1px solid #333", color: "#ccc",
-              borderRadius: "4px", padding: "3px 8px", fontSize: "10px",
+              borderRadius: "6px", padding: "8px 14px", fontSize: "13px",
               fontFamily: "'DM Mono'", cursor: "pointer", letterSpacing: "1px",
               width: "100%",
             }}>
