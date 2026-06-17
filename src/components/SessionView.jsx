@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { DAYS, DEFAULT_EXERCISES, getTodayDayKey, getDateKey, makeEmptySet } from "../lib/constants";
+import { DAYS, DEFAULT_EXERCISES, getDateKey, makeEmptySet } from "../lib/constants";
 import { saveSession, getSessionForDay, getLastSession, getTargets, saveRestPrefs, saveTargets } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
@@ -9,7 +9,7 @@ import RestTimer from "./RestTimer";
 export default function SessionView({ user, profile, onSignOut }) {
   const dateKey = getDateKey();
 
-  const [activeDay, setActiveDay] = useState(getTodayDayKey());
+  const [activeDay, setActiveDay] = useState(null);
   const [activeDateKey, setActiveDateKey] = useState(dateKey);
   const [session, setSession] = useState(null);
   const [lastSession, setLastSession] = useState(null);
@@ -29,6 +29,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   const sessionTimer = useSessionTimer();
 
   useEffect(() => {
+    if (!activeDay) { setLoading(false); return; }
     loadDay(activeDay);
   }, [activeDay]);
 
@@ -244,7 +245,11 @@ export default function SessionView({ user, profile, onSignOut }) {
 
       {/* CONTENT */}
       <div style={{ padding: "8px 18px" }}>
-        {loading ? (
+        {!activeDay ? (
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "#555", letterSpacing: "2px", fontSize: "14px" }}>
+            SELECCIONÁ UN DÍA
+          </div>
+        ) : loading ? (
           <div style={{ textAlign: "center", padding: "60px", color: "#555", letterSpacing: "3px", fontSize: "14px" }}>CARGANDO...</div>
         ) : view === "session" ? (
           <>

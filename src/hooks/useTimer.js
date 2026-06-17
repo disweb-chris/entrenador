@@ -55,17 +55,27 @@ export function useRestTimer() {
   return { active, remaining, total, pct, start, skip };
 }
 
+const SESSION_KEY = "overload_session_start";
+
 export function useSessionTimer() {
-  const [elapsed, setElapsed] = useState(0);
-  const [running, setRunning] = useState(false);
+  const savedStart = localStorage.getItem(SESSION_KEY);
+  const initialElapsed = savedStart
+    ? Math.min(Math.floor((Date.now() - parseInt(savedStart)) / 1000), 28800)
+    : 0;
+  const initialRunning = !!savedStart && initialElapsed < 28800;
+
+  const [elapsed, setElapsed] = useState(initialElapsed);
+  const [running, setRunning] = useState(initialRunning);
   const ref = useRef(null);
 
   const startSession = useCallback(() => {
+    localStorage.setItem(SESSION_KEY, Date.now().toString());
     setElapsed(0);
     setRunning(true);
   }, []);
 
   const stopSession = useCallback(() => {
+    localStorage.removeItem(SESSION_KEY);
     setRunning(false);
   }, []);
 
