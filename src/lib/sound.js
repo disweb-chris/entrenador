@@ -3,6 +3,7 @@ let ctx = null;
 
 function getCtx() {
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === "suspended") ctx.resume();
   return ctx;
 }
 

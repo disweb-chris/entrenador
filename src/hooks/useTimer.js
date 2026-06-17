@@ -5,27 +5,28 @@ export function useRestTimer() {
   const [active, setActive] = useState(false);
   const [total, setTotal] = useState(0);
   const [remaining, setRemaining] = useState(0);
+  // Incrementar generation en cada start() fuerza al useEffect a re-ejecutarse
+  // aunque active ya fuera true (React 18 batchea setActive(false)+setActive(true) → sin cambio neto)
+  const [generation, setGeneration] = useState(0);
   const intervalRef = useRef(null);
   const warnedRef = useRef(false);
 
-  const clear = useCallback(() => {
-    clearInterval(intervalRef.current);
-    setActive(false);
-    warnedRef.current = false;
-  }, []);
-
   const start = useCallback((seconds) => {
-    clear();
+    clearInterval(intervalRef.current);
+    warnedRef.current = false;
     setTotal(seconds);
     setRemaining(seconds);
-    warnedRef.current = false;
     setActive(true);
-  }, [clear]);
+    setGeneration(g => g + 1);
+  }, []);
 
   const skip = useCallback(() => {
-    clear();
+    clearInterval(intervalRef.current);
+    setActive(false);
+    setTotal(0);
     setRemaining(0);
-  }, [clear]);
+    warnedRef.current = false;
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -48,7 +49,7 @@ export function useRestTimer() {
       });
     }, 1000);
     return () => clearInterval(intervalRef.current);
-  }, [active]);
+  }, [active, generation]);
 
   const pct = total > 0 ? ((total - remaining) / total) * 100 : 0;
 
