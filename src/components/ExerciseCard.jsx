@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { RIR_CONFIG, FATIGUE_CONFIG, REST_DEFAULTS, makeEmptySet } from "../lib/constants";
 
-export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onStartRest }) {
+export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest }) {
   const [showNotes, setShowNotes] = useState(false);
 
   const sets = data.sets || [];
@@ -81,6 +81,19 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
               RIR {rirAvg}
             </div>
           )}
+          {onDelete && (
+            <button onClick={onDelete}
+              style={{
+                background: "transparent", border: "none", color: "#444",
+                fontSize: "18px", cursor: "pointer", padding: "4px 6px",
+                minWidth: "44px", minHeight: "44px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "'DM Mono'",
+              }}
+              aria-label={`Eliminar ${name}`}>
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
@@ -114,7 +127,7 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
                 flexShrink: 0, padding: 0,
                 transition: "background 0.2s ease-out, border-color 0.2s ease-out, transform 120ms ease-out",
               }}>
-              {s.done && <span style={{ fontSize: "18px", color: "#fff", lineHeight: 1 }}>✓</span>}
+              {s.done && <span style={{ fontSize: "18px", color: "#f0f0f0", lineHeight: 1 }}>✓</span>}
             </button>
 
             <input type="number" placeholder="kg" value={s.weight}

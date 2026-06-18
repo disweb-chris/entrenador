@@ -73,6 +73,11 @@ export default function SessionView({ user, profile, onSignOut }) {
     persist({ ...session, exercises: { ...session.exercises, [name]: data } });
   }
 
+  function deleteExercise(name) {
+    const { [name]: _, ...rest } = session.exercises;
+    persist({ ...session, exercises: rest });
+  }
+
   function addExercise() {
     if (!newExName.trim()) return;
     persist({
@@ -194,7 +199,10 @@ export default function SessionView({ user, profile, onSignOut }) {
             <div style={{
               height: "100%", borderRadius: "3px",
               background: stats.pct === 100 ? "#22c55e" : "linear-gradient(90deg,#3b82f6,#22c55e)",
-              width: `${stats.pct}%`, transition: "width 0.4s ease-out",
+              width: "100%",
+              transform: `scaleX(${stats.pct / 100})`,
+              transformOrigin: "left center",
+              transition: "transform 0.4s ease-out",
             }} />
           </div>
         </div>
@@ -225,7 +233,7 @@ export default function SessionView({ user, profile, onSignOut }) {
       {/* DAY TITLE + TABS */}
       <div style={{ padding: "14px 18px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <span style={{ fontFamily: "'Bebas Neue'", fontSize: "22px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: "22px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
           <span style={{ color: "#888", fontSize: "13px", marginLeft: "10px", letterSpacing: "1px" }}>{dayInfo?.focus?.toUpperCase()}</span>
         </div>
         <div style={{ display: "flex", gap: "20px" }}>
@@ -240,7 +248,7 @@ export default function SessionView({ user, profile, onSignOut }) {
                 borderBottom: `2px solid ${view === v ? "#f0f0f0" : "transparent"}`,
                 paddingBottom: "3px",
               }}>
-              {v === "session" ? "HOY" : v === "report" ? "INFORME" : "TARGETS"}
+              {v === "session" ? "HOY" : v === "report" ? "INFORME" : "OBJETIVOS"}
             </button>
           ))}
         </div>
@@ -281,12 +289,13 @@ export default function SessionView({ user, profile, onSignOut }) {
                 lastData={lastSession?.exercises?.[name]}
                 target={targets?.[name]}
                 onUpdate={(updated) => updateExercise(name, updated)}
+                onDelete={() => deleteExercise(name)}
                 onStartRest={handleStartRest}
               />
             ))}
 
             {showAddExercise ? (
-              <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "10px", padding: "16px", marginBottom: "10px" }}>
+              <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "12px", padding: "16px", marginBottom: "10px" }}>
                 <input
                   placeholder="Nombre del ejercicio"
                   value={newExName}
@@ -340,12 +349,12 @@ export default function SessionView({ user, profile, onSignOut }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
               <span style={{ fontSize: "13px", color: "#ccc", letterSpacing: "1px" }}>INFORME</span>
               <button onClick={copyReport}
-                style={{ ...actionBtn, background: copied ? "#22c55e" : "#f0f0f0", color: copied ? "#fff" : "#0a0a0a", padding: "10px 22px" }}>
+                style={{ ...actionBtn, background: copied ? "#22c55e" : "#f0f0f0", color: copied ? "#f0f0f0" : "#0a0a0a", padding: "10px 22px" }}>
                 {copied ? "✓ COPIADO" : "COPIAR"}
               </button>
             </div>
             <pre style={{
-              background: "#0f0f0f", border: "1px solid #1e1e1e", borderRadius: "10px",
+              background: "#0f0f0f", border: "1px solid #1e1e1e", borderRadius: "8px",
               padding: "16px", fontSize: "13px", color: "#ccc", whiteSpace: "pre-wrap",
               lineHeight: "1.7", overflowX: "auto",
             }}>
@@ -388,8 +397,8 @@ export default function SessionView({ user, profile, onSignOut }) {
           background: "#0a0a0a", borderTop: "1px solid #1a1a1a",
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
-          <span style={{ fontSize: "11px", color: "#555", letterSpacing: "1px" }}>RIR: 0=FALLO · 1=OBJ · 2=OK · 3=LVN · 4+=FÁC</span>
-          <span style={{ fontSize: "11px", color: stats.pct === 100 ? "#22c55e" : "#555", letterSpacing: "1px" }}>
+          <span style={{ fontSize: "12px", color: "#555", letterSpacing: "0.5px" }}>RIR: 0=FALLO · 1=OBJ · 2=OK · 3=LEVE · 4+=FÁCIL</span>
+          <span style={{ fontSize: "12px", color: stats.pct === 100 ? "#22c55e" : "#555", letterSpacing: "0.5px" }}>
             {stats.pct === 100 ? "✓ COMPLETO" : "FAT: 1=FRESCO · 5=LÍMITE"}
           </span>
         </div>
