@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-17T00:00:00Z",
+  "title": "Design System: OVERLOAD",
+  "extensions": {
+    "colorMeta": {
+      "ink-primary":       { "role": "primary",  "displayName": "Scoresheet White",    "canonical": "oklch(95% 0 0)",      "tonalRamp": ["#111111","#222222","#333333","#555555","#888888","#aaaaaa","#cccccc","#f0f0f0"] },
+      "ink-muted":         { "role": "neutral",  "displayName": "Annotation Gray",     "canonical": "oklch(57% 0 0)",      "tonalRamp": ["#111111","#1e1e1e","#333333","#444444","#555555","#888888","#bbbbbb","#e0e0e0"] },
+      "bg-canvas":         { "role": "neutral",  "displayName": "Pit Black",           "canonical": "oklch(5% 0 0)",       "tonalRamp": ["#050505","#0a0a0a","#111111","#1a1a1a","#242424","#333333","#555555","#888888"] },
+      "bg-surface":        { "role": "neutral",  "displayName": "Equipment Gray",      "canonical": "oklch(8% 0 0)",       "tonalRamp": ["#050505","#0a0a0a","#0f0f0f","#111111","#1a1a1a","#222222","#333333","#555555"] },
+      "accent-done":       { "role": "primary",  "displayName": "Completion Green",    "canonical": "oklch(72% 0.20 145)", "tonalRamp": ["#052814","#0a4a26","#0d6b38","#14954e","#22c55e","#4ade80","#86efac","#dcfce7"] },
+      "accent-target":     { "role": "secondary","displayName": "Target Blue",         "canonical": "oklch(61% 0.21 255)", "tonalRamp": ["#0a1a3d","#0c2461","#1141a3","#1d4ed8","#3b82f6","#60a5fa","#93c5fd","#dbeafe"] },
+      "accent-error":      { "role": "tertiary", "displayName": "Failure Red",         "canonical": "oklch(59% 0.22 25)",  "tonalRamp": ["#450a0a","#7f1d1d","#991b1b","#b91c1c","#ef4444","#f87171","#fca5a5","#fee2e2"] },
+      "rir-objective":     { "role": "tertiary", "displayName": "Objective Orange",    "canonical": "oklch(67% 0.21 50)",  "tonalRamp": ["#431407","#7c2d12","#9a3412","#c2410c","#f97316","#fb923c","#fdba74","#ffedd5"] },
+      "rir-ok":            { "role": "tertiary", "displayName": "Caution Yellow",      "canonical": "oklch(79% 0.17 85)",  "tonalRamp": ["#422006","#713f12","#854d0e","#a16207","#eab308","#facc15","#fde047","#fef9c3"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display / Wordmark", "purpose": "OVERLOAD wordmark and session volume total. Two uses only." },
+      "title":   { "displayName": "Title",              "purpose": "Day heading. Uppercase DM Mono, 22px." },
+      "body":    { "displayName": "Body",               "purpose": "Notes and textarea content. Max 65ch." },
+      "label":   { "displayName": "Label",              "purpose": "All buttons, tabs, day selector pills. Always uppercase." },
+      "data":    { "displayName": "Data",               "purpose": "Weight and reps inputs. Never below 16px." },
+      "micro":   { "displayName": "Micro",              "purpose": "Footer annotations, column headers, pill labels." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "button-press",    "value": "transform 120ms cubic-bezier(0.23, 1, 0.32, 1)", "purpose": "All button :active scale feedback." },
+      { "name": "progress-fill",   "value": "width 0.4s cubic-bezier(0.23, 1, 0.32, 1)",      "purpose": "Progress bar width on set completion." },
+      { "name": "done-fill",       "value": "background 0.2s ease-out, border-color 0.2s ease-out", "purpose": "Done button state transition." },
+      { "name": "timer-arc",       "value": "stroke-dashoffset 1s linear",                    "purpose": "SVG arc countdown in RestTimer." },
+      { "name": "set-opacity",     "value": "opacity 0.2s ease-out",                          "purpose": "Completed sets fade to 55% opacity." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Confirmation actions: AGREGAR, IMPORTAR, COPIAR. The only button that visually pops.",
+      "html": "<button class=\"ds-btn-primary\">AGREGAR</button>",
+      "css": ".ds-btn-primary { background: #f0f0f0; color: #0a0a0a; padding: 12px 18px; border: none; border-radius: 8px; font-family: 'DM Mono', monospace; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; touch-action: manipulation; transition: transform 120ms ease-out; } .ds-btn-primary:active { transform: scale(0.97); } .ds-btn-primary:hover { background: #d0d0d0; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Navigation and secondary actions. Disappears into the dark surface.",
+      "html": "<button class=\"ds-btn-ghost\">SALIR</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: #cccccc; padding: 10px 18px; border: 1px solid #1e1e1e; border-radius: 8px; font-family: 'DM Mono', monospace; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; touch-action: manipulation; transition: transform 120ms ease-out; } .ds-btn-ghost:active { transform: scale(0.97); } .ds-btn-ghost:hover { background: #111111; color: #f0f0f0; }"
+    },
+    {
+      "name": "Day Selector Pill (Active)",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Selected day in the horizontal day picker.",
+      "html": "<button class=\"ds-day-pill ds-day-pill--active\">LUN</button>",
+      "css": ".ds-day-pill { background: transparent; color: #cccccc; padding: 10px 18px; border: 1px solid #1e1e1e; border-radius: 6px; font-family: 'DM Mono', monospace; font-size: 13px; letter-spacing: 1px; cursor: pointer; white-space: nowrap; touch-action: manipulation; transition: transform 120ms ease-out; } .ds-day-pill--active { background: #f0f0f0; color: #0a0a0a; border-color: #f0f0f0; } .ds-day-pill:active { transform: scale(0.97); }"
+    },
+    {
+      "name": "Data Input",
+      "kind": "input",
+      "refersTo": "input-data",
+      "description": "Weight and reps number inputs. Center-aligned mono. Never below 16px.",
+      "html": "<input class=\"ds-input-data\" type=\"number\" placeholder=\"kg\" />",
+      "css": ".ds-input-data { background: #0f0f0f; border: 1px solid #1e1e1e; border-radius: 6px; color: #f0f0f0; font-family: 'DM Mono', monospace; font-size: 16px; padding: 10px 8px; text-align: center; width: 100%; outline: none; } .ds-input-data::placeholder { color: #555555; } .ds-input-data:focus { border-color: #333333; }"
+    },
+    {
+      "name": "Done Button (Default)",
+      "kind": "button",
+      "refersTo": "done-button-default",
+      "description": "44px circle. Marks a set as complete. Minimum touch target for gym use.",
+      "html": "<button class=\"ds-done-btn\" aria-label=\"Marcar serie\"></button>",
+      "css": ".ds-done-btn { width: 44px; height: 44px; border-radius: 50%; background: transparent; border: 2px solid #444444; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0; touch-action: manipulation; transition: background 0.2s ease-out, border-color 0.2s ease-out, transform 120ms ease-out; } .ds-done-btn:active { transform: scale(0.97); } .ds-done-btn--complete { background: #22c55e; border-color: #22c55e; color: #ffffff; font-size: 18px; }"
+    },
+    {
+      "name": "RIR Pill",
+      "kind": "chip",
+      "refersTo": "button-ghost",
+      "description": "Severity-coded rating. 5 pills per row, flex:1. Color encodes athletic performance zone.",
+      "html": "<div class=\"ds-rir-row\"><button class=\"ds-rir-pill ds-rir-0\">0</button><button class=\"ds-rir-pill ds-rir-1 ds-rir-pill--selected\">1</button><button class=\"ds-rir-pill ds-rir-2\">2</button><button class=\"ds-rir-pill ds-rir-3\">3</button><button class=\"ds-rir-pill ds-rir-4\">4+</button></div>",
+      "css": ".ds-rir-row { display: flex; gap: 4px; } .ds-rir-pill { flex: 1; border: 1px solid #333333; border-radius: 5px; padding: 8px 2px; font-family: 'DM Mono', monospace; font-size: 13px; background: transparent; color: #555555; cursor: pointer; text-align: center; touch-action: manipulation; transition: transform 120ms ease-out; } .ds-rir-pill:active { transform: scale(0.97); } .ds-rir-pill--selected { color: #ffffff; } .ds-rir-0.ds-rir-pill--selected { background: #ef4444; border-color: #ef4444; } .ds-rir-1.ds-rir-pill--selected { background: #f97316; border-color: #f97316; } .ds-rir-2.ds-rir-pill--selected { background: #eab308; border-color: #eab308; color: #000000; } .ds-rir-3.ds-rir-pill--selected { background: #22c55e; border-color: #22c55e; } .ds-rir-4.ds-rir-pill--selected { background: #6b7280; border-color: #6b7280; }"
+    },
+    {
+      "name": "Exercise Card",
+      "kind": "card",
+      "refersTo": "button-ghost",
+      "description": "The signature component. Groups all sets for one exercise. Border turns red on repeated RIR 0.",
+      "html": "<div class=\"ds-exercise-card\"><div class=\"ds-exercise-name\">Press Plano Máquina</div><div class=\"ds-exercise-meta\">compound · 180kg vol · <span class=\"ds-target\">Obj: 3×8@80kg</span></div></div>",
+      "css": ".ds-exercise-card { background: #111111; border: 1px solid #1e1e1e; border-radius: 12px; padding: 16px; font-family: 'DM Mono', monospace; } .ds-exercise-card--alarm { border-color: #7f1d1d; } .ds-exercise-name { font-size: 16px; font-weight: 500; color: #f0f0f0; margin-bottom: 4px; } .ds-exercise-meta { font-size: 12px; color: #888888; } .ds-target { color: #3b82f6; }"
+    },
+    {
+      "name": "Progress Bar",
+      "kind": "custom",
+      "refersTo": "accent-done",
+      "description": "Session completion track. 5px height, gradient blue→green, transitions to solid green at 100%.",
+      "html": "<div class=\"ds-progress-track\"><div class=\"ds-progress-fill\" style=\"width: 60%\"></div></div>",
+      "css": ".ds-progress-track { height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; } .ds-progress-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #3b82f6, #22c55e); transition: width 0.4s cubic-bezier(0.23, 1, 0.32, 1); } .ds-progress-fill--complete { background: #22c55e; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Competition Sheet",
+    "overview": "OVERLOAD is a training log built like a powerlifting scoresheet. The interface takes its cues from the precision instruments athletes trust — stopwatches, scoring tablets, weight plates. Everything is dark, dense, and direct. Bebas Neue stamps identity like a scoreboard. DM Mono renders every datum with the flat authority of a measured result.\n\nThe palette is a near-black monolith. Color exists in exactly two registers: the neutral ink stack and a coded severity vocabulary for RIR and fatigue. When the done-button turns green, it means something. The system's restraint is the point.\n\nWhat this system explicitly rejects: the motivational pastel UX of MyFitnessPal and Hevy. The SaaS dashboard template — Inter typeface, metric cards on white — is the anti-reference. Every decision starts from: does this serve the set log, or does it make the interface look like a productivity tool?",
+    "keyCharacteristics": [
+      "Near-black monolith: five surface depths, zero decorative color",
+      "Bebas Neue (identity) + DM Mono (data): functional pairing with intentional contrast",
+      "Touch-first: all interactive elements ≥ 44×44px, spaced for single-hand gym use",
+      "Flat layering: depth via background steps, borders as the only elevation signal",
+      "Aggressive state: RIR 0 fires red across the entire card border, not a subtle icon"
+    ],
+    "rules": [
+      { "name": "The Monolith Rule",      "body": "The only saturated colors permitted are the semantic data vocabulary (RIR scale, done-state, target). No decorative use of any named color outside its defined semantic role.", "section": "colors" },
+      { "name": "The No-Softening Rule",  "body": "Error states are aggressive by design. When RIR 0 fires twice, the entire card border turns #7f1d1d. The app does not soften bad training data with neutral warnings.", "section": "colors" },
+      { "name": "The Mono Data Rule",     "body": "All numeric data entry and display uses DM Mono at ≥ 16px. Anything smaller loses legibility under gym lighting.", "section": "typography" },
+      { "name": "The Bebas Ceiling",      "body": "Bebas Neue appears in exactly two contexts: the OVERLOAD wordmark and volume totals. Never in form labels, button copy, navigation, or data.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule","body": "No box-shadow on any component. If a component needs to appear above others, it uses position: fixed with a border — not a shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use DM Mono for all numeric data, labels, buttons, and form text.",
+      "Do use Bebas Neue exclusively for the OVERLOAD wordmark and volume totals.",
+      "Do keep all touch targets at ≥ 44×44px.",
+      "Do use the RIR color vocabulary consistently: 0=red, 1=orange, 2=yellow, 3=green, 4+=gray.",
+      "Do use border: 1px solid #1e1e1e as the primary depth signal. No box-shadow.",
+      "Do make error states aggressive: RIR 0 twice turns the entire card border #7f1d1d.",
+      "Do add touch-action: manipulation to all buttons to prevent double-tap zoom.",
+      "Do animate transform and opacity only — never width, height, or layout properties.",
+      "Do confirm actions with scale(0.97) on :active, transition: transform 120ms ease-out."
+    ],
+    "donts": [
+      "Don't use box-shadow on any component. The system is flat by design.",
+      "Don't use MyFitnessPal-style colorful cards, muscle icons, achievement badges, or motivational copy.",
+      "Don't use SaaS dashboard patterns: sidebar navigation, Inter/Poppins typeface, metric card grids on white.",
+      "Don't use border and box-shadow together on the same element. Pick one.",
+      "Don't use border-radius greater than 12px on cards or containers.",
+      "Don't use Bebas Neue in buttons, form labels, inputs, or navigation text.",
+      "Don't introduce a new accent color without a defined semantic role.",
+      "Don't animate keyboard-initiated actions or actions repeated more than 10× per session.",
+      "Don't use transition: all — specify exact properties (transform, background, border-color, opacity).",
+      "Don't decorate inactive states with saturated color."
+    ]
+  }
+}

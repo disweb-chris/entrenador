@@ -35,9 +35,12 @@ export default function SessionView({ user, profile, onSignOut }) {
 
   async function loadDay(dayKey) {
     setLoading(true);
-    const [sess, tgts] = await Promise.all([
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const [sess, tgts, nextTgts] = await Promise.all([
       getSessionForDay(user.uid, dateKey, dayKey),
       getTargets(user.uid, getWeekKey()),
+      getTargets(user.uid, getWeekKey(nextWeek)),
     ]);
     const last = await getLastSession(user.uid, dayKey, sess?.dateKey || dateKey);
 
@@ -57,7 +60,7 @@ export default function SessionView({ user, profile, onSignOut }) {
     }
 
     setLastSession(last);
-    setTargets(tgts);
+    setTargets({ ...(tgts || {}), ...(nextTgts || {}) });
     setLoading(false);
   }
 
@@ -135,7 +138,7 @@ export default function SessionView({ user, profile, onSignOut }) {
       const parsed = JSON.parse(targetInput);
       if (!parsed.targets) throw new Error("Formato inválido");
       saveTargets(user.uid, parsed.semana || getWeekKey(), parsed.targets);
-      setTargets(parsed.targets);
+      setTargets(prev => ({ ...(prev || {}), ...parsed.targets }));
       setTargetInput("");
       setView("session");
     } catch (e) {

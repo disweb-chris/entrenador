@@ -83,7 +83,10 @@ export async function getExerciseHistory(uid, exerciseName, limitN = 10) {
 }
 
 export async function saveTargets(uid, weekKey, targets) {
-  await setDoc(doc(db, "targets", `${uid}_${weekKey}`), { uid, weekKey, targets });
+  const docRef = doc(db, "targets", `${uid}_${weekKey}`);
+  const snap = await getDoc(docRef);
+  const existing = snap.exists() ? (snap.data().targets || {}) : {};
+  await setDoc(docRef, { uid, weekKey, targets: { ...existing, ...targets } });
 }
 
 export async function getTargets(uid, weekKey) {
