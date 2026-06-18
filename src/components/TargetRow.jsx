@@ -43,9 +43,17 @@ export default function TargetRow({ name, target, onChange, onRemove }) {
     setEditing(null);
   }
 
+  const FIELD_ORDER = ["series", "reps", "peso"];
+
   function handleKey(e) {
     if (e.key === "Enter") { e.preventDefault(); commit(); }
     if (e.key === "Escape") setEditing(null);
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const nextField = FIELD_ORDER[FIELD_ORDER.indexOf(editing) + 1] ?? null;
+      commit();
+      if (nextField) setTimeout(() => startEdit(nextField), 0);
+    }
   }
 
   function cell(field) {
@@ -144,13 +152,13 @@ export default function TargetRow({ name, target, onChange, onRemove }) {
           style={{
             background: "transparent",
             border: "none",
-            color: "#3a3a3a",
+            color: "#555555",
             fontSize: "16px",
             cursor: "pointer",
             marginLeft: "6px",
             padding: "0 4px",
             height: "44px",
-            minWidth: "32px",
+            minWidth: "44px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

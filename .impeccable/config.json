@@ -1,0 +1,21 @@
+{
+  "detector": {
+    "ignoreValues": [
+      {
+        "rule": "design-system-radius",
+        "value": "3px",
+        "reason": "Progress bar track: 3px on a 5px-tall bar is geometrically correct, not a scale deviation"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#1a0a0a",
+        "reason": "button-session-active.backgroundColor token, defined in DESIGN.md components section"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "5px",
+        "reason": "RIR/Fatigue pill: ds-rir-pill uses 5px radius, explicitly documented in design.json components"
+      }
+    ]
+  }
+}

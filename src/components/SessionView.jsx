@@ -5,7 +5,7 @@ import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
 import ExerciseCard from "./ExerciseCard";
 import RestTimer from "./RestTimer";
-import TargetRow from "./TargetRow";
+import ObjetivosTab from "./ObjetivosTab";
 
 export default function SessionView({ user, profile, onSignOut }) {
   const dateKey = getDateKey();
@@ -148,6 +148,12 @@ export default function SessionView({ user, profile, onSignOut }) {
     overwriteTargets(user.uid, getWeekKey(), rest);
   }
 
+  function handleTargetsMerge(newTargets) {
+    const merged = { ...(targets || {}), ...newTargets };
+    setTargets(merged);
+    overwriteTargets(user.uid, getWeekKey(), merged);
+  }
+
   const dayInfo = DAYS.find(d => d.key === activeDay);
 
   return (
@@ -162,6 +168,9 @@ export default function SessionView({ user, profile, onSignOut }) {
         input, textarea { box-sizing: border-box; }
         button { touch-action: manipulation; transition: transform 120ms ease-out; }
         button:active { transform: scale(0.97); }
+        @keyframes nudge-up { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+        .day-nudge { animation: nudge-up 1.8s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { button { transition: none; } .day-nudge { animation: none; } }
       `}</style>
 
       <RestTimer timer={timer} onSkip={timer.skip} onAdjust={handleAdjustTimer} />
@@ -254,8 +263,9 @@ export default function SessionView({ user, profile, onSignOut }) {
       {/* CONTENT */}
       <div style={{ padding: "8px 18px" }}>
         {!activeDay ? (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#555", letterSpacing: "2px", fontSize: "14px" }}>
-            SELECCIONÁ UN DÍA
+          <div style={{ textAlign: "center", padding: "60px 20px" }}>
+            <div className="day-nudge" style={{ color: "#444", fontSize: "20px", marginBottom: "10px" }}>↑</div>
+            <div style={{ color: "#555", letterSpacing: "2px", fontSize: "14px" }}>SELECCIONÁ UN DÍA</div>
           </div>
         ) : loading ? (
           <div style={{ textAlign: "center", padding: "60px", color: "#555", letterSpacing: "3px", fontSize: "14px" }}>CARGANDO...</div>
@@ -359,33 +369,15 @@ export default function SessionView({ user, profile, onSignOut }) {
             </pre>
           </div>
         ) : (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
-              <span style={{ fontSize: "12px", color: "#555", letterSpacing: "2px" }}>OBJETIVOS</span>
-              <span style={{ fontSize: "12px", color: "#333", fontFamily: "'DM Mono', monospace", letterSpacing: "0.5px" }}>
-                {getWeekKey()}
-              </span>
-            </div>
-            {!activeDay ? (
-              <div style={{ textAlign: "center", padding: "40px 20px", color: "#333", fontSize: "13px", letterSpacing: "1px" }}>
-                SELECCIONÁ UN DÍA
-              </div>
-            ) : Object.keys(session?.exercises || {}).length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 20px", color: "#333", fontSize: "13px", letterSpacing: "1px" }}>
-                AGREGÁ EJERCICIOS PRIMERO
-              </div>
-            ) : (
-              Object.keys(session.exercises).map(exName => (
-                <TargetRow
-                  key={exName}
-                  name={exName}
-                  target={targets?.[exName] ?? null}
-                  onChange={(updated) => handleTargetChange(exName, updated)}
-                  onRemove={() => handleTargetRemove(exName)}
-                />
-              ))
-            )}
-          </div>
+          <ObjetivosTab
+            session={session}
+            targets={targets}
+            activeDay={activeDay}
+            weekKey={getWeekKey()}
+            onTargetChange={handleTargetChange}
+            onTargetRemove={handleTargetRemove}
+            onTargetsMerge={handleTargetsMerge}
+          />
         )}
       </div>
 

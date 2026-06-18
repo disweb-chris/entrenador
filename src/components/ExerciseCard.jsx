@@ -92,7 +92,7 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
           )}
           {rirAvg !== null && (
             <div style={{
-              fontSize: "13px", padding: "4px 10px", borderRadius: "10px",
+              fontSize: "13px", padding: "4px 10px", borderRadius: "6px",
               background: RIR_CONFIG[Math.min(4, Math.round(rirAvg))]?.bg,
               color: RIR_CONFIG[Math.min(4, Math.round(rirAvg))]?.text,
             }}>
@@ -206,7 +206,7 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
       {/* Add set */}
       <button onClick={() => addSet()}
         style={{
-          background: "transparent", border: "1px dashed #333", color: "#666",
+          background: "transparent", border: "1px dashed #333", color: "#555",
           borderRadius: "6px", padding: "12px", width: "100%",
           fontFamily: "'DM Mono'", fontSize: "13px", letterSpacing: "1px", cursor: "pointer",
           marginBottom: "12px",
