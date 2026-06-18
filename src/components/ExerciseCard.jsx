@@ -1,11 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RIR_CONFIG, FATIGUE_CONFIG, REST_DEFAULTS, makeEmptySet } from "../lib/constants";
 
 export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest }) {
   const [showNotes, setShowNotes] = useState(false);
+  const didAutoFill = useRef(false);
 
   const sets = data.sets || [];
   const lastSets = (lastData?.sets || []).filter(s => s.done);
+
+  useEffect(() => {
+    if (didAutoFill.current) return;
+    if (!lastSets.length) return;
+    const needsFill = sets.some(s => s.weight === "" && s.reps === "");
+    if (!needsFill) return;
+    didAutoFill.current = true;
+    const filled = sets.map((s, i) => {
+      if (s.weight !== "" || s.reps !== "") return s;
+      const src = lastSets[i] ?? lastSets[lastSets.length - 1];
+      return { ...s, weight: src.weight || "", reps: src.reps || "" };
+    });
+    onUpdate({ ...data, sets: filled });
+  }, [lastData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rirAvg = (() => {
     const done = sets.filter(s => s.done && s.rir !== null);
@@ -21,8 +36,11 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
   }
 
   function addSet() {
-    const prev = sets[sets.length - 1] || {};
-    onUpdate({ ...data, sets: [...sets, { ...makeEmptySet(), weight: prev.weight || "", reps: prev.reps || "" }] });
+    const nextIdx = sets.length;
+    const fromLast = lastSets[nextIdx] ?? lastSets[lastSets.length - 1];
+    const fromPrev = sets[sets.length - 1] || {};
+    const src = fromLast || fromPrev;
+    onUpdate({ ...data, sets: [...sets, { ...makeEmptySet(), weight: src.weight || "", reps: src.reps || "" }] });
   }
 
   function removeSet(i) {
