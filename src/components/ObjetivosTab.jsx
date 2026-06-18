@@ -49,9 +49,13 @@ function parseTargetText(raw) {
     try {
       const obj = JSON.parse(text);
       if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+        // Support wrapper format: { semana, targets: { ... } }
+        const exercises = (obj.targets && typeof obj.targets === "object" && !Array.isArray(obj.targets))
+          ? obj.targets
+          : obj;
         const items = [];
         const errors = [];
-        for (const [name, val] of Object.entries(obj)) {
+        for (const [name, val] of Object.entries(exercises)) {
           const n = name.trim();
           if (!n) continue;
           if (!val || typeof val !== "object") {
@@ -59,16 +63,18 @@ function parseTargetText(raw) {
             continue;
           }
           const series = val.series ?? val.sets ?? null;
-          const reps = val.reps ?? (Array.isArray(val.reps_por_serie) ? val.reps_por_serie[0] : null) ?? null;
           const peso = val.peso ?? val.weight ?? val.kg ?? null;
-          items.push({
-            name: n,
-            target: {
-              series: series != null ? Number(series) : null,
-              reps: reps != null ? Number(reps) : null,
-              peso: peso != null ? Number(peso) : null,
-            },
-          });
+          const target = {
+            series: series != null ? Number(series) : null,
+            peso: peso != null ? Number(peso) : null,
+          };
+          if (Array.isArray(val.reps_por_serie) && val.reps_por_serie.length > 0) {
+            target.reps_por_serie = val.reps_por_serie.map(Number);
+          } else {
+            const reps = val.reps ?? null;
+            target.reps = reps != null ? Number(reps) : null;
+          }
+          items.push({ name: n, target });
         }
         return { items, errors };
       }
@@ -115,7 +121,8 @@ function targetLabel(t) {
   if (!t) return "—";
   const parts = [];
   if (t.series != null) parts.push(t.series);
-  if (t.reps != null) parts.push(`×${t.reps}`);
+  const reps = Array.isArray(t.reps_por_serie) ? t.reps_por_serie[0] : t.reps;
+  if (reps != null) parts.push(`×${reps}`);
   if (t.peso != null) parts.push(`@${t.peso}kg`);
   return parts.join("") || "—";
 }
