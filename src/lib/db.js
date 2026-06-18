@@ -89,6 +89,10 @@ export async function saveTargets(uid, weekKey, targets) {
   await setDoc(docRef, { uid, weekKey, targets: { ...existing, ...targets } });
 }
 
+export async function overwriteTargets(uid, weekKey, targets) {
+  await setDoc(doc(db, "targets", `${uid}_${weekKey}`), { uid, weekKey, targets });
+}
+
 export async function getTargets(uid, weekKey) {
   const snap = await getDoc(doc(db, "targets", `${uid}_${weekKey}`));
   return snap.exists() ? snap.data().targets : null;

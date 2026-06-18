@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { DAYS, DEFAULT_EXERCISES, getDateKey, makeEmptySet } from "../lib/constants";
-import { saveSession, getSessionForDay, getLastSession, getTargets, saveRestPrefs, saveTargets } from "../lib/db";
+import { saveSession, getSessionForDay, getLastSession, getTargets, saveRestPrefs, overwriteTargets } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
 import ExerciseCard from "./ExerciseCard";
 import RestTimer from "./RestTimer";
+import TargetRow from "./TargetRow";
 
 export default function SessionView({ user, profile, onSignOut }) {
   const dateKey = getDateKey();
@@ -17,8 +18,6 @@ export default function SessionView({ user, profile, onSignOut }) {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("session");
   const [reportText, setReportText] = useState("");
-  const [targetInput, setTargetInput] = useState("");
-  const [targetError, setTargetError] = useState("");
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [newExName, setNewExName] = useState("");
   const [newExType, setNewExType] = useState("isolation");
@@ -137,18 +136,16 @@ export default function SessionView({ user, profile, onSignOut }) {
     });
   }
 
-  function importTargets() {
-    setTargetError("");
-    try {
-      const parsed = JSON.parse(targetInput);
-      if (!parsed.targets) throw new Error("Formato inválido");
-      saveTargets(user.uid, parsed.semana || getWeekKey(), parsed.targets);
-      setTargets(prev => ({ ...(prev || {}), ...parsed.targets }));
-      setTargetInput("");
-      setView("session");
-    } catch (e) {
-      setTargetError("JSON inválido. Revisá el formato.");
-    }
+  function handleTargetChange(exName, updated) {
+    const newTargets = { ...(targets || {}), [exName]: updated };
+    setTargets(newTargets);
+    overwriteTargets(user.uid, getWeekKey(), newTargets);
+  }
+
+  function handleTargetRemove(exName) {
+    const { [exName]: _, ...rest } = (targets || {});
+    setTargets(rest);
+    overwriteTargets(user.uid, getWeekKey(), rest);
   }
 
   const dayInfo = DAYS.find(d => d.key === activeDay);
@@ -363,30 +360,31 @@ export default function SessionView({ user, profile, onSignOut }) {
           </div>
         ) : (
           <div>
-            {targets && (
-              <div style={{ marginBottom: "20px" }}>
-                <div style={{ fontSize: "13px", color: "#888", letterSpacing: "2px", marginBottom: "10px" }}>TARGETS ACTUALES</div>
-                {Object.entries(targets).map(([ex, t]) => (
-                  <div key={ex} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #1a1a1a", fontSize: "14px" }}>
-                    <span style={{ color: "#ccc" }}>{ex}</span>
-                    <span style={{ color: "#60a5fa" }}>{t.series}×{t.reps}@{t.peso}kg</span>
-                  </div>
-                ))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
+              <span style={{ fontSize: "12px", color: "#555", letterSpacing: "2px" }}>OBJETIVOS</span>
+              <span style={{ fontSize: "12px", color: "#333", fontFamily: "'DM Mono', monospace", letterSpacing: "0.5px" }}>
+                {getWeekKey()}
+              </span>
+            </div>
+            {!activeDay ? (
+              <div style={{ textAlign: "center", padding: "40px 20px", color: "#333", fontSize: "13px", letterSpacing: "1px" }}>
+                SELECCIONÁ UN DÍA
               </div>
+            ) : Object.keys(session?.exercises || {}).length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 20px", color: "#333", fontSize: "13px", letterSpacing: "1px" }}>
+                AGREGÁ EJERCICIOS PRIMERO
+              </div>
+            ) : (
+              Object.keys(session.exercises).map(exName => (
+                <TargetRow
+                  key={exName}
+                  name={exName}
+                  target={targets?.[exName] ?? null}
+                  onChange={(updated) => handleTargetChange(exName, updated)}
+                  onRemove={() => handleTargetRemove(exName)}
+                />
+              ))
             )}
-            <div style={{ fontSize: "13px", color: "#888", letterSpacing: "2px", marginBottom: "10px" }}>IMPORTAR TARGETS</div>
-            <textarea
-              value={targetInput}
-              onChange={e => setTargetInput(e.target.value)}
-              placeholder={'Pegá el JSON de targets:\n{\n  "semana": "2026-W24",\n  "targets": {\n    "Jalón cerrado V": { "series": 3, "reps": 12, "peso": 90 }\n  }\n}'}
-              rows={8}
-              style={{ ...inputBase, width: "100%", resize: "vertical", marginBottom: "10px", lineHeight: "1.5" }}
-            />
-            {targetError && <div style={{ color: "#ef4444", fontSize: "13px", marginBottom: "10px" }}>{targetError}</div>}
-            <button onClick={importTargets}
-              style={{ ...actionBtn, background: "#f0f0f0", color: "#0a0a0a", width: "100%", padding: "16px" }}>
-              IMPORTAR
-            </button>
           </div>
         )}
       </div>
