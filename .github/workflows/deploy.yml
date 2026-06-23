@@ -33,7 +33,8 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: /public_html/entrenador/
-          protocol: ftp
+          protocol: ftps
           port: 21
-          security: loose
+          security: strict
           dangerous-clean-slate: true
+          timeout: 60000
