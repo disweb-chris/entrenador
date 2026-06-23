@@ -36,17 +36,20 @@ export default function SessionView({ user, profile, onSignOut }) {
     setLoading(true);
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
-    const [sess, tgts, nextTgts] = await Promise.all([
+    const [todaySnap, tgts, nextTgts] = await Promise.all([
       getSessionForDay(user.uid, dateKey, dayKey),
       getTargets(user.uid, getWeekKey()),
       getTargets(user.uid, getWeekKey(nextWeek)),
     ]);
-    const last = await getLastSession(user.uid, dayKey, sess?.dateKey || dateKey);
 
-    if (sess) {
-      setSession(sess);
-      setActiveDateKey(sess.dateKey || dateKey);
-      setSessionNotes(sess.sessionNotes || "");
+    // Only use a saved session if it belongs to today; past sessions are just reference
+    const todaySession = todaySnap?.dateKey === dateKey ? todaySnap : null;
+    const last = await getLastSession(user.uid, dayKey, dateKey);
+
+    if (todaySession) {
+      setSession(todaySession);
+      setActiveDateKey(dateKey);
+      setSessionNotes(todaySession.sessionNotes || "");
     } else {
       const defaults = DEFAULT_EXERCISES[dayKey] || [];
       const exercises = {};
