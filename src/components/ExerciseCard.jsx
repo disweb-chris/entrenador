@@ -30,6 +30,9 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
 
   const hasRir0 = sets.filter(s => s.done && s.rir === 0).length > 1;
 
+  // Descanso efectivo: el de esta sesión → el de la sesión anterior → default por tipo
+  const effectiveRest = data.restTime ?? lastData?.restTime ?? REST_DEFAULTS[type] ?? 60;
+
   function updateSet(i, field, val) {
     const updated = sets.map((s, idx) => idx === i ? { ...s, [field]: val } : s);
     onUpdate({ ...data, sets: updated });
@@ -51,10 +54,13 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
   function markDone(i) {
     const s = sets[i];
     const newDone = !s.done;
-    updateSet(i, "done", newDone);
+    const updated = sets.map((set, idx) => idx === i ? { ...set, done: newDone } : set);
     if (newDone) {
-      const restSecs = data.restTime ?? REST_DEFAULTS[type] ?? 60;
-      onStartRest(restSecs, name, type);
+      // Fija restTime en la sesión al usarlo, así la próxima sesión lo hereda
+      onUpdate({ ...data, sets: updated, restTime: effectiveRest });
+      onStartRest(effectiveRest, name, type);
+    } else {
+      onUpdate({ ...data, sets: updated });
     }
   }
 
@@ -219,7 +225,7 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
         <span style={{ fontSize: "12px", color: "#555", letterSpacing: "1px" }}>DESCANSO</span>
         <input
           type="number"
-          value={data.restTime ?? REST_DEFAULTS[type] ?? 60}
+          value={effectiveRest}
           onChange={e => onUpdate({ ...data, restTime: parseInt(e.target.value) || 60 })}
           style={{ ...inputSt, width: "68px" }}
         />

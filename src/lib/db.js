@@ -97,12 +97,3 @@ export async function getTargets(uid, weekKey) {
   const snap = await getDoc(doc(db, "targets", `${uid}_${weekKey}`));
   return snap.exists() ? snap.data().targets : null;
 }
-
-export async function saveRestPrefs(uid, prefs) {
-  await setDoc(doc(db, "restprefs", uid), { prefs }, { merge: true });
-}
-
-export async function getRestPrefs(uid) {
-  const snap = await getDoc(doc(db, "restprefs", uid));
-  return snap.exists() ? snap.data().prefs || {} : {};
-}
