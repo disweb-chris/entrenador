@@ -7,25 +7,32 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
-    // Sessions: only owner
+    // Sessions: only owner.
+    // Reads of missing docs (resource == null) must be allowed: the app probes
+    // past dates with getDoc. Creates/updates must carry the caller's uid.
     match /sessions/{sessionId} {
-      allow read, write: if request.auth != null
-        && resource == null || resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null
+        && (resource == null || resource.data.uid == request.auth.uid);
       allow create: if request.auth != null
         && request.resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null
+        && resource.data.uid == request.auth.uid;
     }
 
     // Targets: only owner
     match /targets/{targetId} {
-      allow read, write: if request.auth != null
+      allow read: if request.auth != null
         && (resource == null || resource.data.uid == request.auth.uid);
       allow create: if request.auth != null
         && request.resource.data.uid == request.auth.uid;
-    }
-
-    // Rest prefs: only owner
-    match /restprefs/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null
+        && resource.data.uid == request.auth.uid;
     }
   }
 }

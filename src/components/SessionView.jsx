@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DAYS, DEFAULT_EXERCISES, getDateKey, makeEmptySet } from "../lib/constants";
-import { saveSession, getSessionForDay, getLastSession, getTargets, saveRestPrefs, overwriteTargets } from "../lib/db";
+import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
 import ExerciseCard from "./ExerciseCard";
@@ -27,12 +27,46 @@ export default function SessionView({ user, profile, onSignOut }) {
   const timer = useRestTimer();
   const sessionTimer = useSessionTimer();
 
+  // ── Auto-guardado con debounce ─────────────────────────────────────────────
+  // Cada edición actualiza el estado al instante; la escritura a Firestore se
+  // difiere 800ms para no escribir por cada tecla. pendingRef guarda lo no
+  // escrito para poder hacer flush al cambiar de día o cerrar la app.
+  const saveTimerRef = useRef(null);
+  const pendingRef = useRef(null);
+  const skipSaveRef = useRef(true);
+
+  const flushSave = useCallback(() => {
+    clearTimeout(saveTimerRef.current);
+    const p = pendingRef.current;
+    if (!p) return;
+    pendingRef.current = null;
+    saveSession(p.uid, p.dateKey, p.dayKey, p.session)
+      .catch(err => console.error("Error guardando sesión:", err));
+  }, []);
+
+  useEffect(() => {
+    if (!session || !activeDay) return;
+    if (skipSaveRef.current) { skipSaveRef.current = false; return; }
+    pendingRef.current = { uid: user.uid, dateKey: activeDateKey, dayKey: activeDay, session };
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(flushSave, 800);
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    window.addEventListener("pagehide", flushSave);
+    return () => {
+      window.removeEventListener("pagehide", flushSave);
+      flushSave();
+    };
+  }, [flushSave]);
+
   useEffect(() => {
     if (!activeDay) { setLoading(false); return; }
     loadDay(activeDay);
   }, [activeDay]);
 
   async function loadDay(dayKey) {
+    flushSave(); // no perder ediciones pendientes del día anterior
     setLoading(true);
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
@@ -49,6 +83,7 @@ export default function SessionView({ user, profile, onSignOut }) {
     const todaySession = todaySnap?.dateKey === dateKey ? todaySnap : null;
     const last = await getLastSession(user.uid, dayKey, dateKey);
 
+    skipSaveRef.current = true; // lo que viene de la DB no hay que re-escribirlo
     if (todaySession) {
       setSession(todaySession);
       setActiveDateKey(dateKey);
@@ -57,7 +92,9 @@ export default function SessionView({ user, profile, onSignOut }) {
       const defaults = DEFAULT_EXERCISES[dayKey] || [];
       const exercises = {};
       defaults.forEach(ex => {
-        exercises[ex.name] = { type: ex.type, sets: [makeEmptySet()], notes: "", restTime: null };
+        // Hereda el descanso configurado en la sesión anterior de este día
+        const prevRest = last?.exercises?.[ex.name]?.restTime ?? null;
+        exercises[ex.name] = { type: ex.type, sets: [makeEmptySet()], notes: "", restTime: prevRest };
       });
       setSession({ exercises, sessionNotes: "" });
       setActiveDateKey(dateKey);
@@ -71,37 +108,39 @@ export default function SessionView({ user, profile, onSignOut }) {
     setLoading(false);
   }
 
-  const persist = useCallback(async (newSession) => {
-    setSession(newSession);
-    await saveSession(user.uid, activeDateKey, activeDay, newSession);
-  }, [user.uid, activeDateKey, activeDay]);
-
+  // Updates funcionales: varios ExerciseCard pueden actualizar en el mismo
+  // ciclo (ej. auto-fill al montar) sin pisarse entre sí.
   function updateExercise(name, data) {
-    persist({ ...session, exercises: { ...session.exercises, [name]: data } });
+    setSession(prev => ({ ...prev, exercises: { ...prev.exercises, [name]: data } }));
   }
 
   function deleteExercise(name) {
-    const { [name]: _, ...rest } = session.exercises;
-    persist({ ...session, exercises: rest });
+    setSession(prev => {
+      const { [name]: _, ...rest } = prev.exercises;
+      return { ...prev, exercises: rest };
+    });
   }
 
   function addExercise() {
-    if (!newExName.trim()) return;
-    persist({
-      ...session,
+    const exName = newExName.trim();
+    if (!exName) return;
+    setSession(prev => ({
+      ...prev,
       exercises: {
-        ...session.exercises,
-        [newExName.trim()]: { type: newExType, sets: [makeEmptySet()], notes: "", restTime: null },
+        ...prev.exercises,
+        [exName]: {
+          type: newExType, sets: [makeEmptySet()], notes: "",
+          restTime: lastSession?.exercises?.[exName]?.restTime ?? null,
+        },
       },
-    });
+    }));
     setNewExName("");
     setShowAddExercise(false);
   }
 
-  function handleStartRest(seconds, exName) {
+  function handleStartRest(seconds) {
     if (!sessionTimer.running) sessionTimer.startSession();
     timer.start(seconds);
-    saveRestPrefs(user.uid, { [exName]: seconds });
   }
 
   function handleAdjustTimer(delta) {
@@ -283,8 +322,9 @@ export default function SessionView({ user, profile, onSignOut }) {
               placeholder="Notas de la sesión (sueño, energía, contexto...)"
               value={sessionNotes}
               onChange={e => {
-                setSessionNotes(e.target.value);
-                persist({ ...session, sessionNotes: e.target.value });
+                const value = e.target.value;
+                setSessionNotes(value);
+                setSession(prev => ({ ...prev, sessionNotes: value }));
               }}
               rows={1}
               style={{
