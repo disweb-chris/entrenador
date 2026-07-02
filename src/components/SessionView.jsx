@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DAYS, DEFAULT_EXERCISES, getDateKey, makeEmptySet } from "../lib/constants";
 import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
@@ -70,18 +70,24 @@ export default function SessionView({ user, profile, onSignOut }) {
     setLoading(true);
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
-    const [sess, tgts, nextTgts] = await Promise.all([
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    const [todaySnap, tgts, nextTgts, lastTgts] = await Promise.all([
       getSessionForDay(user.uid, dateKey, dayKey),
       getTargets(user.uid, getWeekKey()),
       getTargets(user.uid, getWeekKey(nextWeek)),
+      getTargets(user.uid, getWeekKey(lastWeek)),
     ]);
-    const last = await getLastSession(user.uid, dayKey, sess?.dateKey || dateKey);
+
+    // Only use a saved session if it belongs to today; past sessions are just reference
+    const todaySession = todaySnap?.dateKey === dateKey ? todaySnap : null;
+    const last = await getLastSession(user.uid, dayKey, dateKey);
 
     skipSaveRef.current = true; // lo que viene de la DB no hay que re-escribirlo
-    if (sess) {
-      setSession(sess);
-      setActiveDateKey(sess.dateKey || dateKey);
-      setSessionNotes(sess.sessionNotes || "");
+    if (todaySession) {
+      setSession(todaySession);
+      setActiveDateKey(dateKey);
+      setSessionNotes(todaySession.sessionNotes || "");
     } else {
       const defaults = DEFAULT_EXERCISES[dayKey] || [];
       const exercises = {};
@@ -96,7 +102,9 @@ export default function SessionView({ user, profile, onSignOut }) {
     }
 
     setLastSession(last);
-    setTargets({ ...(tgts || {}), ...(nextTgts || {}) });
+    // Si no hay targets esta semana, usar los de la semana pasada como base
+    const baseTgts = tgts || lastTgts || {};
+    setTargets({ ...baseTgts, ...(nextTgts || {}) });
     setLoading(false);
   }
 

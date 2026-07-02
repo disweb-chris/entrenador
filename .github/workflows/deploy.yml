@@ -37,3 +37,4 @@ jobs:
           port: 21
           security: loose
           dangerous-clean-slate: true
+          timeout: 60000
