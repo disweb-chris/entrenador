@@ -16,7 +16,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          # 20+ es necesario: el service worker se minifica con
+          # @rollup/plugin-terser, que depende del global `crypto` que Node 18
+          # no expone. Node 18 ademas dejo de tener soporte en abril de 2025.
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
