@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { DAYS, DEFAULT_EXERCISES, getDateKey, getTodayDayKey, getNextDayKey, sortedExercises, makeEmptySet, Z } from "../lib/constants";
-import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getExerciseHistory, setUserProfile } from "../lib/db";
+import { saveSession, getSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getRecentSessions, exerciseHistoryFrom, setUserProfile } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
 import { useWakeLock } from "../hooks/useWakeLock";
 import ExerciseCard from "./ExerciseCard";
 import RestTimer from "./RestTimer";
 import ObjetivosTab from "./ObjetivosTab";
+import SessionPicker from "./SessionPicker";
+import { computeBests } from "../lib/records";
 
 export default function SessionView({ user, profile, onSignOut }) {
   const dateKey = getDateKey();
@@ -15,6 +17,10 @@ export default function SessionView({ user, profile, onSignOut }) {
   // faltar un día no debería correr la rutina. Abrir la app no cuesta un tap.
   const [activeDay, setActiveDay] = useState(() => getNextDayKey(profile, dateKey));
   const [activeDateKey, setActiveDateKey] = useState(dateKey);
+  // Fecha que se está mirando; null es la sesión de hoy. Va en estado y no en
+  // un argumento suelto para que el efecto de carga sea la única puerta de
+  // entrada: si no, elegir del historial dispara dos loadDay que compiten.
+  const [viewDate, setViewDate] = useState(null);
   // Si el usuario elige un día a mano, deja de ser la sugerencia de la rotación.
   const [autoSelected, setAutoSelected] = useState(true);
   const [session, setSession] = useState(null);
@@ -28,6 +34,10 @@ export default function SessionView({ user, profile, onSignOut }) {
   const [newExType, setNewExType] = useState("isolation");
   const [sessionNotes, setSessionNotes] = useState("");
   const [copied, setCopied] = useState(false);
+  // Sesiones recientes: una sola lectura alimenta récords, historial y gráficos.
+  const [recent, setRecent] = useState(null);
+  const [recentError, setRecentError] = useState(null);
+  const [showPicker, setShowPicker] = useState(false);
 
   const timer = useRestTimer();
   const sessionTimer = useSessionTimer();
@@ -68,32 +78,60 @@ export default function SessionView({ user, profile, onSignOut }) {
 
   useEffect(() => {
     if (!activeDay) { setLoading(false); return; }
-    loadDay(activeDay);
-  }, [activeDay]);
+    loadDay(activeDay, viewDate);
+  }, [activeDay, viewDate]);
 
-  async function loadDay(dayKey) {
+  // Historial completo: alimenta los récords, el selector de sesiones y los
+  // gráficos con una sola lectura en vez de una consulta por ejercicio.
+  useEffect(() => {
+    let cancelled = false;
+    getRecentSessions(user.uid)
+      .then(rows => { if (!cancelled) { setRecent(rows); setRecentError(null); } })
+      .catch(err => {
+        if (cancelled) return;
+        console.error("No se pudo leer el historial:", err);
+        // Firestore devuelve el link para crear el índice dentro del mensaje.
+        setRecentError({
+          indexUrl: err?.code === "failed-precondition"
+            ? err.message.match(/https:\/\/\S+/)?.[0]?.replace(/[).]+$/, "") ?? null
+            : null,
+        });
+        setRecent([]);
+      });
+    return () => { cancelled = true; };
+  }, [user.uid]);
+
+  /**
+   * Carga una sesión. Sin `targetDate` es la de hoy; con `targetDate` es una
+   * sesión pasada, que se abre editable para poder corregirla.
+   */
+  async function loadDay(dayKey, targetDate = null) {
     flushSave(); // no perder ediciones pendientes del día anterior
     setLoading(true);
+    const viewingDate = targetDate || dateKey;
+    const isPast = viewingDate !== dateKey;
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
     const lastWeek = new Date();
     lastWeek.setDate(lastWeek.getDate() - 7);
-    const [todaySnap, tgts, nextTgts, lastTgts] = await Promise.all([
-      getSessionForDay(user.uid, dateKey, dayKey),
+    const [snap, tgts, nextTgts, lastTgts] = await Promise.all([
+      isPast ? getSession(user.uid, viewingDate, dayKey)
+             : getSessionForDay(user.uid, dateKey, dayKey),
       getTargets(user.uid, getWeekKey()),
       getTargets(user.uid, getWeekKey(nextWeek)),
       getTargets(user.uid, getWeekKey(lastWeek)),
     ]);
 
-    // Only use a saved session if it belongs to today; past sessions are just reference
-    const todaySession = todaySnap?.dateKey === dateKey ? todaySnap : null;
-    const last = await getLastSession(user.uid, dayKey, dateKey);
+    // Only use a saved session if it belongs to the date being viewed; older
+    // ones are reference material, not the session you are editing.
+    const loaded = snap?.dateKey === viewingDate ? snap : null;
+    const last = await getLastSession(user.uid, dayKey, viewingDate);
 
     skipSaveRef.current = true; // lo que viene de la DB no hay que re-escribirlo
-    if (todaySession) {
-      setSession(todaySession);
-      setActiveDateKey(dateKey);
-      setSessionNotes(todaySession.sessionNotes || "");
+    if (loaded) {
+      setSession(loaded);
+      setActiveDateKey(viewingDate);
+      setSessionNotes(loaded.sessionNotes || "");
     } else {
       const defaults = DEFAULT_EXERCISES[dayKey] || [];
       const exercises = {};
@@ -104,7 +142,7 @@ export default function SessionView({ user, profile, onSignOut }) {
         exercises[ex.name] = { type: ex.type, order: idx, sets: [makeEmptySet()], notes: "", restTime: prevRest };
       });
       setSession({ exercises, sessionNotes: "" });
-      setActiveDateKey(dateKey);
+      setActiveDateKey(viewingDate);
       setSessionNotes("");
     }
 
@@ -152,11 +190,11 @@ export default function SessionView({ user, profile, onSignOut }) {
     timer.start(seconds);
   }
 
-  // El historial se pide sólo cuando el usuario despliega el gráfico: son 30
-  // sesiones por ejercicio y traerlo para cada tarjeta al abrir el día sería caro.
+  // El gráfico se arma con el historial que ya está en memoria: antes cada
+  // tarjeta que abrías disparaba su propia consulta de 30 documentos.
   const loadHistory = useCallback(
-    (exName) => getExerciseHistory(user.uid, exName),
-    [user.uid]
+    async (exName) => exerciseHistoryFrom(recent, exName),
+    [recent]
   );
 
   function handleAdjustTimer(delta) {
@@ -183,11 +221,30 @@ export default function SessionView({ user, profile, onSignOut }) {
   const routineMarkedRef = useRef(false);
   useEffect(() => { routineMarkedRef.current = false; }, [activeDay, activeDateKey]);
   useEffect(() => {
+    // Corregir una sesión pasada no avanza la rotación.
     if (routineMarkedRef.current || stats.doneSets === 0 || !activeDay) return;
+    if (activeDateKey !== dateKey) return;
     routineMarkedRef.current = true;
     setUserProfile(user.uid, { lastWorkedDay: activeDay, lastWorkedDate: activeDateKey })
       .catch(err => console.error("No se pudo registrar el avance de la rutina:", err));
   }, [stats.doneSets, activeDay, activeDateKey, user.uid]);
+
+  // La sesión que estás editando se excluye: si no, cada serie se compararía
+  // contra sí misma y nunca habría récord.
+  const bests = useMemo(
+    () => computeBests(recent, activeDateKey),
+    [recent, activeDateKey]
+  );
+
+  function pickSession(picked) {
+    setShowPicker(false);
+    setAutoSelected(false);
+    setView("session");
+    // Los dos setState se agrupan en un render, así que el efecto de carga
+    // corre una sola vez y ya con el día y la fecha nuevos.
+    setActiveDay(picked.dayKey);
+    setViewDate(picked.dateKey === dateKey ? null : picked.dateKey);
+  }
 
   function buildReport() {
     if (!session) return;
@@ -198,6 +255,7 @@ export default function SessionView({ user, profile, onSignOut }) {
       dateKey: activeDateKey,
       sessionDuration: sessionTimer.formatted,
       userName: profile?.name || user.email,
+      bests,
     });
     setReportText(text);
     setView("report");
@@ -229,6 +287,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   }
 
   const dayInfo = DAYS.find(d => d.key === activeDay);
+  const isPastSession = viewDate !== null;
 
   return (
     <div style={{
@@ -249,6 +308,18 @@ export default function SessionView({ user, profile, onSignOut }) {
 
       <RestTimer timer={timer} onSkip={timer.skip} onAdjust={handleAdjustTimer} />
 
+      {showPicker && (
+        <SessionPicker
+          sessions={recent}
+          activeDateKey={activeDateKey}
+          todayDateKey={dateKey}
+          loading={recent === null}
+          error={recentError}
+          onPick={pickSession}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+
       {/* HEADER */}
       <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #1a1a1a" }}>
         {/* El wordmark cede tamaño al dato: a 38px no entraba junto al volumen
@@ -263,11 +334,23 @@ export default function SessionView({ user, profile, onSignOut }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "2px" }}>
           {/* La fecha no se trunca: en una app de un solo usuario dice más que el
               nombre, y en 320px sólo entra uno de los dos. */}
-          <div style={{ color: "#888", fontSize: "13px", letterSpacing: "1px", display: "flex", gap: "6px", minWidth: 0 }}>
+          <div style={{ color: "#888", fontSize: "13px", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {profile?.name || user.email}
             </span>
-            <span style={{ flexShrink: 0 }}>· {activeDateKey}</span>
+            {/* Revisar o corregir una sesión anterior es navegar entre sesiones,
+                no otra vista de la actual: por eso cuelga de la fecha y no de
+                la fila de HOY / INFORME / OBJETIVOS. */}
+            <button onClick={() => setShowPicker(true)}
+              aria-haspopup="dialog"
+              style={{
+                background: "transparent", border: "none", cursor: "pointer",
+                color: isPastSession ? "#eab308" : "#888",
+                fontFamily: "'DM Mono'", fontSize: "13px", letterSpacing: "1px",
+                minHeight: "44px", padding: "0 2px", flexShrink: 0,
+              }}>
+              · {activeDateKey} ▾
+            </button>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
             <span style={{ fontSize: "13px", color: sessionTimer.running ? "#22c55e" : "#888", letterSpacing: "0.5px" }}>
@@ -310,7 +393,7 @@ export default function SessionView({ user, profile, onSignOut }) {
       <div style={{ padding: "8px 18px", display: "flex", gap: "8px", overflowX: "auto", borderBottom: "1px solid #1a1a1a" }}>
         {DAYS.map(d => (
           <button key={d.key}
-            onClick={() => { setActiveDay(d.key); setAutoSelected(false); setView("session"); }}
+            onClick={() => { setActiveDay(d.key); setViewDate(null); setAutoSelected(false); setView("session"); }}
             style={{
               padding: "0 14px", minHeight: "44px", borderRadius: "6px", border: "1px solid",
               borderColor: activeDay === d.key ? "#f0f0f0" : "#1e1e1e",
@@ -324,6 +407,28 @@ export default function SessionView({ user, profile, onSignOut }) {
           </button>
         ))}
       </div>
+
+      {/* Editar una sesión vieja sin que se note llevaría a cargar el
+          entrenamiento de hoy sobre la fecha equivocada. */}
+      {isPastSession && (
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          gap: "12px", padding: "0 18px", background: "#111",
+          borderBottom: "1px solid #1a1a1a",
+        }}>
+          <span style={{ color: "#eab308", fontSize: "12px", letterSpacing: "1px" }}>
+            EDITANDO UNA SESIÓN ANTERIOR
+          </span>
+          <button onClick={() => { setViewDate(null); setAutoSelected(false); }}
+            style={{
+              background: "transparent", border: "none", color: "#eab308",
+              fontFamily: "'DM Mono'", fontSize: "12px", letterSpacing: "1px",
+              cursor: "pointer", minHeight: "44px", padding: "0 2px",
+            }}>
+            VOLVER A HOY →
+          </button>
+        </div>
+      )}
 
       {/* DAY TITLE */}
       <div style={{ padding: "14px 18px 8px", display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
@@ -397,6 +502,7 @@ export default function SessionView({ user, profile, onSignOut }) {
                 onDelete={() => deleteExercise(name)}
                 onStartRest={handleStartRest}
                 loadHistory={loadHistory}
+                best={bests[name]}
               />
             ))}
 
