@@ -1,9 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { RIR_CONFIG, FATIGUE_CONFIG, REST_DEFAULTS, makeEmptySet } from "../lib/constants";
 import { suggestProgression, SUGGESTION_COLOR } from "../lib/progression";
+import ProgressionChart from "./ProgressionChart";
 
-export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest }) {
+export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest, loadHistory }) {
   const [showNotes, setShowNotes] = useState(false);
+  const [showChart, setShowChart] = useState(false);
+  const [history, setHistory] = useState(null);
+  const [historyState, setHistoryState] = useState("idle"); // idle | loading | ready | error
+  const [indexUrl, setIndexUrl] = useState(null);
   const didAutoFill = useRef(false);
 
   const sets = data.sets || [];
@@ -77,6 +82,26 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
   const totalVol = sets
     .filter(s => s.done)
     .reduce((a, s) => a + (parseFloat(s.weight) || 0) * (parseInt(s.reps) || 0), 0);
+
+  async function toggleChart() {
+    const opening = !showChart;
+    setShowChart(opening);
+    if (!opening || historyState !== "idle" || !loadHistory) return;
+    setHistoryState("loading");
+    try {
+      setHistory(await loadHistory(name));
+      setHistoryState("ready");
+    } catch (err) {
+      console.error("Error cargando historial:", err);
+      // La consulta del historial necesita un índice compuesto (uid + dateKey).
+      // Si falta, Firestore devuelve el link para crearlo dentro del mensaje:
+      // lo mostramos en vez de dejar al usuario buscándolo en la consola.
+      if (err?.code === "failed-precondition") {
+        setIndexUrl(err.message.match(/https:\/\/\S+/)?.[0]?.replace(/[).]+$/, "") ?? null);
+      }
+      setHistoryState("error");
+    }
+  }
 
   return (
     <div style={{
@@ -249,11 +274,39 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
         <span style={{ fontSize: "12px", color: "#555" }}>seg</span>
       </div>
 
-      {/* Exercise notes */}
-      <button onClick={() => setShowNotes(!showNotes)}
-        style={{ background: "transparent", border: "none", color: data.notes ? "#888" : "#444", fontSize: "13px", fontFamily: "'DM Mono'", cursor: "pointer", letterSpacing: "0.5px", padding: "4px 0" }}>
-        {data.notes ? `📝 ${data.notes.slice(0, 40)}${data.notes.length > 40 ? "…" : ""}` : "+ nota del ejercicio"}
-      </button>
+      {/* Secondary actions */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+        <button onClick={() => setShowNotes(!showNotes)}
+          style={{ ...subtleBtn, color: data.notes ? "#888" : "#444", textAlign: "left", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {data.notes ? `📝 ${data.notes.slice(0, 40)}${data.notes.length > 40 ? "…" : ""}` : "+ nota del ejercicio"}
+        </button>
+        <button onClick={toggleChart}
+          style={{ ...subtleBtn, color: showChart ? "#888" : "#444", flexShrink: 0 }}
+          aria-expanded={showChart}>
+          {showChart ? "▾ progreso" : "▸ progreso"}
+        </button>
+      </div>
+
+      {showChart && (
+        <div style={{ marginTop: "8px", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: "8px", padding: "12px" }}>
+          {historyState === "loading" && (
+            <div style={{ textAlign: "center", padding: "30px", color: "#333", fontSize: "11px", letterSpacing: "1px" }}>CARGANDO…</div>
+          )}
+          {historyState === "error" && (
+            <div style={{ textAlign: "center", padding: "24px 12px", fontSize: "11px", letterSpacing: "1px", lineHeight: 1.8 }}>
+              <div style={{ color: "#7f1d1d" }}>NO SE PUDO CARGAR EL HISTORIAL</div>
+              {indexUrl && (
+                <a href={indexUrl} target="_blank" rel="noreferrer"
+                  style={{ color: "#3b82f6", textDecoration: "underline", display: "inline-block", padding: "8px 0" }}>
+                  CREAR EL ÍNDICE EN FIREBASE →
+                </a>
+              )}
+            </div>
+          )}
+          {historyState === "ready" && <ProgressionChart history={history} exerciseName={name} />}
+        </div>
+      )}
+
       {showNotes && (
         <textarea
           value={data.notes || ""}
@@ -276,6 +329,14 @@ const inputSt = {
   background: "#0f0f0f", border: "1px solid #1e1e1e", color: "#f0f0f0",
   padding: "10px 8px", borderRadius: "6px", fontFamily: "'DM Mono'",
   fontSize: "16px", outline: "none", width: "100%", textAlign: "center",
+};
+
+// Acciones secundarias de la tarjeta: discretas, pero con el target táctil de
+// 44px que exige usarlas con el teléfono en la mano entre series.
+const subtleBtn = {
+  background: "transparent", border: "none", fontSize: "13px",
+  fontFamily: "'DM Mono'", cursor: "pointer", letterSpacing: "0.5px",
+  padding: "4px 0", minHeight: "44px",
 };
 
 const btnSt = {
