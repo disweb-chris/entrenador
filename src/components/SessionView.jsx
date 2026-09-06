@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { DAYS, DEFAULT_EXERCISES, getDateKey, makeEmptySet } from "../lib/constants";
+import { DAYS, DEFAULT_EXERCISES, getDateKey, getTodayDayKey, makeEmptySet } from "../lib/constants";
 import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
+import { useWakeLock } from "../hooks/useWakeLock";
 import ExerciseCard from "./ExerciseCard";
 import RestTimer from "./RestTimer";
 import ObjetivosTab from "./ObjetivosTab";
@@ -10,7 +11,8 @@ import ObjetivosTab from "./ObjetivosTab";
 export default function SessionView({ user, profile, onSignOut }) {
   const dateKey = getDateKey();
 
-  const [activeDay, setActiveDay] = useState(null);
+  // Arranca en el día que toca hoy: abrir la app en el gym no debería costar un tap.
+  const [activeDay, setActiveDay] = useState(getTodayDayKey);
   const [activeDateKey, setActiveDateKey] = useState(dateKey);
   const [session, setSession] = useState(null);
   const [lastSession, setLastSession] = useState(null);
@@ -26,6 +28,7 @@ export default function SessionView({ user, profile, onSignOut }) {
 
   const timer = useRestTimer();
   const sessionTimer = useSessionTimer();
+  useWakeLock(sessionTimer.running);
 
   // ── Auto-guardado con debounce ─────────────────────────────────────────────
   // Cada edición actualiza el estado al instante; la escritura a Firestore se
