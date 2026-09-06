@@ -227,17 +227,18 @@ Tactile and direct. Every button gives transform feedback on `:active` (`scale(0
 
 The RIR and Fatigue pill rows are the system's most distinctive component. They are a coded severity display masquerading as a rating UI.
 
-- **Shape:** 6px radius, `flex: 1` width (five equal-width pills per row)
-- **Unselected:** transparent bg, `#333` border, `#555` text
-- **Selected:** filled with the semantic color for that value (RIR 0 = `#ef4444`, RIR 1 = `#f97316`, RIR 2 = `#eab308`, RIR 3 = `#22c55e`, RIR 4 = `#6b7280`); white text
-- **Padding:** 8px top/bottom, 2px left/right. Font: DM Mono 13px.
+- **Layout:** one full-width row per scale, stacked (RIR above, FAT below), each row prefixed by a fixed 30px label. Side by side, five pills in half a card fall to ~25px wide — under the touch minimum. Full width they land at ~50px.
+- **Shape:** 6px radius, `flex: 1` width (five equal-width pills per row), `min-height: 44px`
+- **Unselected:** transparent bg, `#333` border, `#888` text (`#555` fails AA at 2.53:1 on the card surface)
+- **Selected:** filled with the semantic color for that value (RIR 0 = `#ef4444`, RIR 1 = `#f97316`, RIR 2 = `#eab308`, RIR 3 = `#22c55e`, RIR 4 = `#6b7280`); text `#0a0a0a`, except RIR 4 (`#6b7280`) which takes white. The fill colors are fixed; the text color is whichever of the two clears 4.5:1 — white on orange is 2.8:1 and on green 2.3:1, unreadable under gym lighting.
+- **Padding:** 0 top/bottom (height comes from `min-height`), 2px left/right. Font: DM Mono 13px.
 - **Active feedback:** `transform: scale(0.97)` via global button rule.
 
 ### Done Button
 
 - **Shape:** 44×44px circle (50% radius)
 - **Default:** transparent bg, `2px solid #444` border, no content
-- **Complete:** `#22c55e` fill, white checkmark (18px), `2px solid #22c55e` border
+- **Complete:** `#22c55e` fill, `#0a0a0a` checkmark (18px), `2px solid #22c55e` border — punched out of the fill, the same inversion the active day uses. White on this green is 2.3:1.
 - **Transition:** `background 0.2s ease-out, border-color 0.2s ease-out, transform 120ms ease-out`
 - The 44px size is the minimum touch target for gym use. Do not reduce.
 
@@ -245,7 +246,8 @@ The RIR and Fatigue pill rows are the system's most distinctive component. They 
 
 Fixed top-right floating panel. Surfaces mid-rest without covering the set row.
 
-- Background: `#111111`, border `1px solid #333333` (warning: `#ef4444`, done: `#22c55e`)
+- Background: `#111111`, border `1px solid #333333` (warning: `#ef4444`, done: `#22c55e`), radius 12px, no shadow — the border colour alone carries the state, per the flat-by-default rule.
+- Stacking: `z-index` comes from the semantic `Z` scale in `lib/constants.js` (`statusBar: 10`, `restTimer: 20`), never a loose 999.
 - SVG arc: 72×72px, radius 30px, strokeWidth 4px. Color tracks timer state. `transition: stroke-dashoffset 1s linear`.
 - Text in SVG: Bebas Neue 20px — one of the two permitted Bebas Neue uses (displaying a large number mid-session qualifies as volume display).
 - Dismiss behavior: pressing CERRAR or SALTEAR resets the timer completely (`total = 0`) and removes the panel.

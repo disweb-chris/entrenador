@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { DAYS, DEFAULT_EXERCISES, getDateKey, getTodayDayKey, makeEmptySet } from "../lib/constants";
+import { DAYS, DEFAULT_EXERCISES, getDateKey, getTodayDayKey, makeEmptySet, Z } from "../lib/constants";
 import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getExerciseHistory } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
@@ -234,20 +234,38 @@ export default function SessionView({ user, profile, onSignOut }) {
 
       {/* HEADER */}
       <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #1a1a1a" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: "38px", letterSpacing: "5px", lineHeight: 1 }}>OVERLOAD</div>
-            <div style={{ color: "#888", fontSize: "13px", letterSpacing: "1px", marginTop: "4px" }}>
-              {profile?.name || user.email} · {activeDateKey}
-            </div>
+        {/* El wordmark cede tamaño al dato: a 38px no entraba junto al volumen
+            en pantallas de 320px, y competía con las cifras que son el contenido. */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px" }}>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: "26px", letterSpacing: "4px", lineHeight: 1, flexShrink: 0 }}>OVERLOAD</div>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: "28px", lineHeight: 1, color: stats.totalVol > 0 ? "#f0f0f0" : "#555" }}>
+            {stats.totalVol > 0 ? `${stats.totalVol.toLocaleString()}kg` : "—"}
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: "28px", color: stats.totalVol > 0 ? "#f0f0f0" : "#444" }}>
-              {stats.totalVol > 0 ? `${stats.totalVol.toLocaleString()}kg` : "—"}
-            </div>
-            <div style={{ fontSize: "13px", color: sessionTimer.running ? "#22c55e" : "#888", letterSpacing: "0.5px" }}>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "2px" }}>
+          {/* La fecha no se trunca: en una app de un solo usuario dice más que el
+              nombre, y en 320px sólo entra uno de los dos. */}
+          <div style={{ color: "#888", fontSize: "13px", letterSpacing: "1px", display: "flex", gap: "6px", minWidth: 0 }}>
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {profile?.name || user.email}
+            </span>
+            <span style={{ flexShrink: 0 }}>· {activeDateKey}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+            <span style={{ fontSize: "13px", color: sessionTimer.running ? "#22c55e" : "#888", letterSpacing: "0.5px" }}>
               {sessionTimer.running ? `⏱ ${sessionTimer.formatted}` : "sin iniciar"}
-            </div>
+            </span>
+            {/* Vivía al final del carrusel de días, donde quedaba fuera de pantalla
+                en todo teléfono: había que scrollear la tira para poder salir. */}
+            <button onClick={onSignOut}
+              style={{
+                background: "transparent", border: "none", color: "#888",
+                fontFamily: "'DM Mono'", fontSize: "12px", letterSpacing: "1px",
+                cursor: "pointer", minHeight: "44px", minWidth: "44px", padding: "0 0 0 6px",
+              }}>
+              SALIR
+            </button>
           </div>
         </div>
 
@@ -272,49 +290,47 @@ export default function SessionView({ user, profile, onSignOut }) {
       </div>
 
       {/* DAY SELECTOR */}
-      <div style={{ padding: "10px 18px", display: "flex", gap: "8px", overflowX: "auto", borderBottom: "1px solid #1a1a1a" }}>
+      <div style={{ padding: "8px 18px", display: "flex", gap: "8px", overflowX: "auto", borderBottom: "1px solid #1a1a1a" }}>
         {DAYS.map(d => (
           <button key={d.key}
             onClick={() => { setActiveDay(d.key); setView("session"); }}
             style={{
-              padding: "10px 18px", borderRadius: "6px", border: "1px solid",
+              padding: "0 14px", minHeight: "44px", borderRadius: "6px", border: "1px solid",
               borderColor: activeDay === d.key ? "#f0f0f0" : "#1e1e1e",
               background: activeDay === d.key ? "#f0f0f0" : "transparent",
               color: activeDay === d.key ? "#0a0a0a" : "#ccc",
               fontFamily: "'DM Mono'", fontSize: "13px", letterSpacing: "1px",
               cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-            }}>
+            }}
+            aria-current={activeDay === d.key ? "true" : undefined}>
             {d.label}
           </button>
         ))}
-        <button onClick={onSignOut}
-          style={{ marginLeft: "auto", padding: "10px 18px", background: "transparent", border: "1px solid #1e1e1e", borderRadius: "6px", color: "#888", fontFamily: "'DM Mono'", fontSize: "13px", cursor: "pointer", flexShrink: 0 }}>
-          SALIR
-        </button>
       </div>
 
-      {/* DAY TITLE + TABS */}
-      <div style={{ padding: "14px 18px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: "22px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
-          <span style={{ color: "#888", fontSize: "13px", marginLeft: "10px", letterSpacing: "1px" }}>{dayInfo?.focus?.toUpperCase()}</span>
-        </div>
-        <div style={{ display: "flex", gap: "20px" }}>
-          {["session", "report", "targets"].map(v => (
-            <button key={v}
-              onClick={() => { if (v === "report") buildReport(); else setView(v); }}
-              style={{
-                background: "transparent", border: "none", fontFamily: "'DM Mono'",
-                fontSize: "13px", letterSpacing: "1px", textTransform: "uppercase",
-                cursor: "pointer",
-                color: view === v ? "#f0f0f0" : "#888",
-                borderBottom: `2px solid ${view === v ? "#f0f0f0" : "transparent"}`,
-                paddingBottom: "3px",
-              }}>
-              {v === "session" ? "HOY" : v === "report" ? "INFORME" : "OBJETIVOS"}
-            </button>
-          ))}
-        </div>
+      {/* DAY TITLE */}
+      <div style={{ padding: "14px 18px 8px", display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+        <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: "22px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
+        <span style={{ color: "#888", fontSize: "13px", letterSpacing: "1px" }}>{dayInfo?.focus?.toUpperCase()}</span>
+      </div>
+
+      {/* VIEW TABS — fila propia: compartiendo línea con el título del día se
+          superponían a 393px, el ancho de teléfono más común. */}
+      <div style={{ padding: "0 18px", display: "flex", borderBottom: "1px solid #1a1a1a" }}>
+        {["session", "report", "targets"].map(v => (
+          <button key={v}
+            onClick={() => { if (v === "report") buildReport(); else setView(v); }}
+            style={{
+              flex: 1, minHeight: "44px", background: "transparent", border: "none",
+              fontFamily: "'DM Mono'", fontSize: "13px", letterSpacing: "1px",
+              textTransform: "uppercase", cursor: "pointer",
+              color: view === v ? "#f0f0f0" : "#888",
+              boxShadow: view === v ? "inset 0 -2px 0 #f0f0f0" : "none",
+            }}
+            aria-current={view === v ? "page" : undefined}>
+            {v === "session" ? "HOY" : v === "report" ? "INFORME" : "OBJETIVOS"}
+          </button>
+        ))}
       </div>
 
       {/* CONTENT */}
@@ -340,8 +356,8 @@ export default function SessionView({ user, profile, onSignOut }) {
               style={{
                 width: "100%", marginBottom: "12px", background: "#0f0f0f",
                 border: "1px solid #1a1a1a", color: "#ccc", padding: "12px 14px",
-                borderRadius: "8px", fontFamily: "'DM Mono'", fontSize: "14px",
-                resize: "none", outline: "none",
+                borderRadius: "8px", fontFamily: "'DM Mono'", fontSize: "16px",
+                minHeight: "44px", resize: "none", outline: "none",
               }}
             />
 
@@ -415,7 +431,7 @@ export default function SessionView({ user, profile, onSignOut }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
               <span style={{ fontSize: "13px", color: "#ccc", letterSpacing: "1px" }}>INFORME</span>
               <button onClick={copyReport}
-                style={{ ...actionBtn, background: copied ? "#22c55e" : "#f0f0f0", color: copied ? "#f0f0f0" : "#0a0a0a", padding: "10px 22px" }}>
+                style={{ ...actionBtn, background: copied ? "#22c55e" : "#f0f0f0", color: "#0a0a0a", minHeight: "44px", padding: "0 22px" }}>
                 {copied ? "✓ COPIADO" : "COPIAR"}
               </button>
             </div>
@@ -440,16 +456,34 @@ export default function SessionView({ user, profile, onSignOut }) {
         )}
       </div>
 
+      {/* Barra de estado. Con la sesión sin arrancar explica la escala — es el
+          onboarding de las escalas RIR/fatiga. Apenas hay una serie registrada
+          la escala ya se aprendió, y el espacio pasa al estado real de la sesión. */}
       {view === "session" && (
         <div style={{
-          position: "fixed", bottom: 0, left: 0, right: 0, padding: "10px 18px",
+          position: "fixed", bottom: 0, left: 0, right: 0, zIndex: Z.statusBar,
+          padding: "10px 18px calc(10px + env(safe-area-inset-bottom, 0px))",
           background: "#0a0a0a", borderTop: "1px solid #1a1a1a",
           display: "flex", justifyContent: "space-between", alignItems: "center",
+          gap: "12px", flexWrap: "wrap",
         }}>
-          <span style={{ fontSize: "12px", color: "#555", letterSpacing: "0.5px" }}>RIR: 0=FALLO · 1=OBJ · 2=OK · 3=LEVE · 4+=FÁCIL</span>
-          <span style={{ fontSize: "12px", color: stats.pct === 100 ? "#22c55e" : "#555", letterSpacing: "0.5px" }}>
-            {stats.pct === 100 ? "✓ COMPLETO" : "FAT: 1=FRESCO · 5=LÍMITE"}
-          </span>
+          {stats.doneSets === 0 ? (
+            <span style={{ fontSize: "12px", color: "#888", letterSpacing: "0.5px" }}>
+              RIR 0=FALLO · 4+=FÁCIL &nbsp;·&nbsp; FATIGA 1=FRESCO · 5=LÍMITE
+            </span>
+          ) : (
+            <>
+              <span style={{ fontSize: "12px", color: "#888", letterSpacing: "0.5px" }}>
+                {stats.doneSets}/{stats.totalSets} series · {stats.totalVol.toLocaleString()}kg
+              </span>
+              <span style={{
+                fontSize: "12px", letterSpacing: "0.5px",
+                color: stats.pct === 100 ? "#22c55e" : "#888",
+              }}>
+                {stats.pct === 100 ? "✓ COMPLETO" : `${stats.pct}%`}
+              </span>
+            </>
+          )}
         </div>
       )}
     </div>

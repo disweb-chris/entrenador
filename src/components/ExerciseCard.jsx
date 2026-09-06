@@ -113,12 +113,14 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: "16px", fontWeight: "500", letterSpacing: "0.5px", marginBottom: "4px" }}>{name}</div>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          {/* Los separadores "·" iban dentro de cada span y quedaban huérfanos al
+              principio de la línea cuando el nombre del ejercicio forzaba el wrap. */}
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: "12px", color: "#888", letterSpacing: "1px", textTransform: "uppercase" }}>{type}</span>
-            {totalVol > 0 && <span style={{ fontSize: "12px", color: "#888" }}>· {totalVol}kg vol</span>}
+            {totalVol > 0 && <span style={{ fontSize: "12px", color: "#888" }}>{totalVol}kg vol</span>}
             {target && (
               <span style={{ fontSize: "12px", color: "#3b82f6", letterSpacing: "0.5px" }}>
-                · Obj: {target.series}×
+                Obj: {target.series}×
                 {target.reps_por_serie ? target.reps_por_serie.join("/") : target.reps}
                 {target.peso != null ? `@${target.peso}kg` : ""}
               </span>
@@ -143,7 +145,7 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
           {onDelete && (
             <button onClick={onDelete}
               style={{
-                background: "transparent", border: "none", color: "#444",
+                background: "transparent", border: "none", color: "#888",
                 fontSize: "18px", cursor: "pointer", padding: "4px 6px",
                 minWidth: "44px", minHeight: "44px",
                 display: "flex", alignItems: "center", justifyContent: "center",
@@ -172,7 +174,7 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
       )}
 
       {/* Column headers */}
-      <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 1fr 36px", gap: "6px", paddingBottom: "6px", color: "#555", fontSize: "11px", letterSpacing: "1.5px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 1fr 44px", gap: "6px", paddingBottom: "6px", color: "#888", fontSize: "11px", letterSpacing: "1.5px" }}>
         <div />
         <div style={{ textAlign: "center" }}>PESO</div>
         <div style={{ textAlign: "center" }}>REPS</div>
@@ -183,7 +185,7 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
       {sets.map((s, i) => (
         <div key={i} style={{ marginBottom: "12px", opacity: s.done ? 0.55 : 1, transition: "opacity 0.2s ease-out" }}>
           {/* Row 1: done + inputs + delete */}
-          <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 1fr 36px", gap: "6px", alignItems: "center", marginBottom: "8px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 1fr 44px", gap: "6px", alignItems: "center", marginBottom: "8px" }}>
             <button onClick={() => markDone(i)}
               style={{
                 width: "44px", height: "44px", borderRadius: "50%",
@@ -193,69 +195,68 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
                 flexShrink: 0, padding: 0,
                 transition: "background 0.2s ease-out, border-color 0.2s ease-out, transform 120ms ease-out",
               }}>
-              {s.done && <span style={{ fontSize: "18px", color: "#f0f0f0", lineHeight: 1 }}>✓</span>}
+              {/* Blanco sobre el verde de completado da 2.3:1; el tilde calado en
+                  el color del fondo llega a 9.2:1 y repite el patrón de inversión
+                  que ya usa el día activo. */}
+              {s.done && <span style={{ fontSize: "18px", color: "#0a0a0a", lineHeight: 1 }}>✓</span>}
             </button>
 
-            <input type="number" placeholder="kg" value={s.weight}
+            <input type="number" inputMode="decimal" placeholder="kg" value={s.weight}
               onChange={e => updateSet(i, "weight", e.target.value)}
+              aria-label={`Peso serie ${i + 1}`}
               style={inputSt} />
 
-            <input type="number" placeholder="reps" value={s.reps}
+            <input type="number" inputMode="numeric" placeholder="reps" value={s.reps}
               onChange={e => updateSet(i, "reps", e.target.value)}
+              aria-label={`Repeticiones serie ${i + 1}`}
               style={inputSt} />
 
             <button onClick={() => removeSet(i)}
-              style={{ background: "transparent", border: "none", color: "#555", fontSize: "22px", cursor: "pointer", padding: 0, width: "36px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              aria-label={`Eliminar serie ${i + 1}`}
+              style={{ background: "transparent", border: "none", color: "#888", fontSize: "22px", cursor: "pointer", padding: 0, width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}>
               ×
             </button>
           </div>
 
-          {/* Row 2: RIR + Fatigue */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-            <div>
-              <div style={{ display: "flex", gap: "4px", marginBottom: "3px" }}>
-                {[0, 1, 2, 3, 4].map(r => (
-                  <button key={r}
-                    onClick={() => updateSet(i, "rir", s.rir === r ? null : r)}
+          {/* Row 2: escalas RIR y fatiga, una fila cada una. Lado a lado, cinco
+              pills en media tarjeta caían a 25px de ancho — por debajo del
+              mínimo táctil que pide PRODUCT.md. A fila completa llegan a ~50px.
+              La etiqueta va fija a la izquierda: apiladas, dos filas de cinco
+              pills sin rótulo son indistinguibles entre sí. */}
+          {[
+            { key: "rir", label: "RIR", values: [0, 1, 2, 3, 4], config: RIR_CONFIG, current: s.rir },
+            { key: "fatigue", label: "FAT", values: [1, 2, 3, 4, 5], config: FATIGUE_CONFIG, current: s.fatigue },
+          ].map(scale => (
+            <div key={scale.key} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "10px", color: "#888", letterSpacing: "1.5px", width: "30px", flexShrink: 0 }}>
+                {scale.label}
+              </span>
+              <div style={{ display: "flex", gap: "4px", flex: 1 }}>
+                {scale.values.map(v => (
+                  <button key={v}
+                    onClick={() => updateSet(i, scale.key, scale.current === v ? null : v)}
+                    aria-pressed={scale.current === v}
+                    aria-label={`Serie ${i + 1}, ${scale.label === "RIR" ? "RIR" : "fatiga"} ${v === 4 && scale.key === "rir" ? "4 o más" : v}: ${scale.config[v].desc}`}
                     style={{
                       ...btnSt,
-                      background: s.rir === r ? RIR_CONFIG[r].bg : "transparent",
-                      color: s.rir === r ? RIR_CONFIG[r].text : "#555",
-                      borderColor: s.rir === r ? RIR_CONFIG[r].bg : "#333",
+                      background: scale.current === v ? scale.config[v].bg : "transparent",
+                      color: scale.current === v ? scale.config[v].text : "#888",
+                      borderColor: scale.current === v ? scale.config[v].bg : "#333",
                     }}>
-                    {r === 4 ? "4+" : r}
+                    {scale.config[v].label}
                   </button>
                 ))}
               </div>
-              <div style={{ fontSize: "10px", color: "#555", letterSpacing: "1.5px", textAlign: "center" }}>RIR</div>
             </div>
-
-            <div>
-              <div style={{ display: "flex", gap: "4px", marginBottom: "3px" }}>
-                {[1, 2, 3, 4, 5].map(f => (
-                  <button key={f}
-                    onClick={() => updateSet(i, "fatigue", s.fatigue === f ? null : f)}
-                    style={{
-                      ...btnSt,
-                      background: s.fatigue === f ? FATIGUE_CONFIG[f].bg : "transparent",
-                      color: s.fatigue === f ? FATIGUE_CONFIG[f].text : "#555",
-                      borderColor: s.fatigue === f ? FATIGUE_CONFIG[f].bg : "#333",
-                    }}>
-                    {f}
-                  </button>
-                ))}
-              </div>
-              <div style={{ fontSize: "10px", color: "#555", letterSpacing: "1.5px", textAlign: "center" }}>FATIGA</div>
-            </div>
-          </div>
+          ))}
         </div>
       ))}
 
       {/* Add set */}
       <button onClick={() => addSet()}
         style={{
-          background: "transparent", border: "1px dashed #333", color: "#555",
-          borderRadius: "6px", padding: "12px", width: "100%",
+          background: "transparent", border: "1px dashed #333", color: "#888",
+          borderRadius: "6px", minHeight: "44px", width: "100%",
           fontFamily: "'DM Mono'", fontSize: "13px", letterSpacing: "1px", cursor: "pointer",
           marginBottom: "12px",
         }}>
@@ -264,24 +265,26 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
 
       {/* Rest time */}
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-        <span style={{ fontSize: "12px", color: "#555", letterSpacing: "1px" }}>DESCANSO</span>
+        <span style={{ fontSize: "12px", color: "#888", letterSpacing: "1px" }}>DESCANSO</span>
         <input
           type="number"
+          inputMode="numeric"
           value={effectiveRest}
           onChange={e => onUpdate({ ...data, restTime: parseInt(e.target.value) || 60 })}
-          style={{ ...inputSt, width: "68px" }}
+          aria-label={`Descanso de ${name} en segundos`}
+          style={{ ...inputSt, width: "72px" }}
         />
-        <span style={{ fontSize: "12px", color: "#555" }}>seg</span>
+        <span style={{ fontSize: "12px", color: "#888" }}>seg</span>
       </div>
 
       {/* Secondary actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
         <button onClick={() => setShowNotes(!showNotes)}
-          style={{ ...subtleBtn, color: data.notes ? "#888" : "#444", textAlign: "left", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          style={{ ...subtleBtn, color: "#888", textAlign: "left", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {data.notes ? `📝 ${data.notes.slice(0, 40)}${data.notes.length > 40 ? "…" : ""}` : "+ nota del ejercicio"}
         </button>
         <button onClick={toggleChart}
-          style={{ ...subtleBtn, color: showChart ? "#888" : "#444", flexShrink: 0 }}
+          style={{ ...subtleBtn, color: "#888", flexShrink: 0 }}
           aria-expanded={showChart}>
           {showChart ? "▾ progreso" : "▸ progreso"}
         </button>
@@ -316,7 +319,7 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
           style={{
             width: "100%", marginTop: "8px", background: "#0f0f0f",
             border: "1px solid #1e1e1e", color: "#ccc", padding: "10px 12px",
-            borderRadius: "6px", fontFamily: "'DM Mono'", fontSize: "14px",
+            borderRadius: "6px", fontFamily: "'DM Mono'", fontSize: "16px",
             resize: "none", outline: "none",
           }}
         />
@@ -325,9 +328,11 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
   );
 }
 
+// 44px de alto: peso y reps son los controles más tocados de la app y quedaban
+// en 40. 16px de fuente además evita el zoom automático de Safari en iOS.
 const inputSt = {
   background: "#0f0f0f", border: "1px solid #1e1e1e", color: "#f0f0f0",
-  padding: "10px 8px", borderRadius: "6px", fontFamily: "'DM Mono'",
+  padding: "10px 8px", minHeight: "44px", borderRadius: "6px", fontFamily: "'DM Mono'",
   fontSize: "16px", outline: "none", width: "100%", textAlign: "center",
 };
 
@@ -339,8 +344,10 @@ const subtleBtn = {
   padding: "4px 0", minHeight: "44px",
 };
 
+// DESIGN.md marca las pills de RIR como target crítico: se tocan una vez por
+// serie con la mano cansada. Estaban en 34px de alto.
 const btnSt = {
-  border: "1px solid", borderRadius: "5px", padding: "8px 2px",
+  border: "1px solid", borderRadius: "5px", padding: "0 2px", minHeight: "44px",
   fontSize: "13px", cursor: "pointer", fontFamily: "'DM Mono'",
   transition: "transform 120ms ease-out", flex: 1, textAlign: "center",
 };
