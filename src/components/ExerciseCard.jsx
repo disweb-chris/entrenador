@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { RIR_CONFIG, FATIGUE_CONFIG, REST_DEFAULTS, makeEmptySet } from "../lib/constants";
+import { suggestProgression, SUGGESTION_COLOR } from "../lib/progression";
 
 export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest }) {
   const [showNotes, setShowNotes] = useState(false);
@@ -7,6 +8,9 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
 
   const sets = data.sets || [];
   const lastSets = (lastData?.sets || []).filter(s => s.done);
+
+  // Qué tocaría hacer hoy según cómo se sintió la sesión anterior.
+  const suggestion = useMemo(() => suggestProgression(lastData, type), [lastData, type]);
 
   useEffect(() => {
     if (didAutoFill.current) return;
@@ -16,6 +20,11 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
     didAutoFill.current = true;
     const filled = sets.map((s, i) => {
       if (s.weight !== "" || s.reps !== "") return s;
+      // Con RIR de la sesión anterior se arranca en la carga sugerida;
+      // sin RIR se repite lo hecho la última vez.
+      if (suggestion) {
+        return { ...s, weight: String(suggestion.weight), reps: String(suggestion.reps) };
+      }
       const src = lastSets[i] ?? lastSets[lastSets.length - 1];
       return { ...s, weight: src.weight || "", reps: src.reps || "" };
     });
@@ -39,10 +48,11 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
   }
 
   function addSet() {
-    const nextIdx = sets.length;
-    const fromLast = lastSets[nextIdx] ?? lastSets[lastSets.length - 1];
-    const fromPrev = sets[sets.length - 1] || {};
-    const src = fromLast || fromPrev;
+    // A mitad del ejercicio lo predecible es seguir con la carga que ya estás
+    // usando; recién si no hay ninguna se recurre a la sesión anterior.
+    const fromPrev = sets[sets.length - 1];
+    const fromLast = lastSets[sets.length] ?? lastSets[lastSets.length - 1];
+    const src = (fromPrev?.weight ? fromPrev : fromLast) || {};
     onUpdate({ ...data, sets: [...sets, { ...makeEmptySet(), weight: src.weight || "", reps: src.reps || "" }] });
   }
 
@@ -121,11 +131,18 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
         </div>
       </div>
 
-      {/* Last session comparison */}
+      {/* Last session + progression suggestion */}
       {lastSets.length > 0 && (
-        <div style={{ fontSize: "12px", color: "#888", marginBottom: "10px", padding: "8px 10px", background: "#0d0d0d", borderRadius: "6px", letterSpacing: "0.5px" }}>
-          Anterior: {lastSets.length}×{lastSets[0]?.reps}@{lastSets[0]?.weight}kg
-          {lastSets[0]?.rir !== null && ` · RIR ${lastSets[0]?.rir}`}
+        <div style={{ fontSize: "12px", marginBottom: "10px", padding: "8px 10px", background: "#0d0d0d", borderRadius: "6px", letterSpacing: "0.5px" }}>
+          <div style={{ color: "#888" }}>
+            Anterior: {lastSets.length}×{lastSets[0]?.reps}@{lastSets[0]?.weight}kg
+            {lastSets[0]?.rir !== null && ` · RIR ${lastSets[0]?.rir}`}
+          </div>
+          {suggestion && (
+            <div style={{ color: SUGGESTION_COLOR[suggestion.action], marginTop: "5px" }}>
+              → Hoy: {suggestion.weight}kg × {suggestion.reps} · {suggestion.reason}
+            </div>
+          )}
         </div>
       )}
 
