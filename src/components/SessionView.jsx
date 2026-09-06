@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DAYS, DEFAULT_EXERCISES, getDateKey, getTodayDayKey, makeEmptySet } from "../lib/constants";
-import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets } from "../lib/db";
+import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getExerciseHistory } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
 import { useWakeLock } from "../hooks/useWakeLock";
@@ -145,6 +145,13 @@ export default function SessionView({ user, profile, onSignOut }) {
     if (!sessionTimer.running) sessionTimer.startSession();
     timer.start(seconds);
   }
+
+  // El historial se pide sólo cuando el usuario despliega el gráfico: son 30
+  // sesiones por ejercicio y traerlo para cada tarjeta al abrir el día sería caro.
+  const loadHistory = useCallback(
+    (exName) => getExerciseHistory(user.uid, exName),
+    [user.uid]
+  );
 
   function handleAdjustTimer(delta) {
     timer.start(Math.max(5, timer.remaining + delta));
@@ -349,6 +356,7 @@ export default function SessionView({ user, profile, onSignOut }) {
                 onUpdate={(updated) => updateExercise(name, updated)}
                 onDelete={() => deleteExercise(name)}
                 onStartRest={handleStartRest}
+                loadHistory={loadHistory}
               />
             ))}
 
