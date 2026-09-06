@@ -69,7 +69,11 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
   function markDone(i) {
     const s = sets[i];
     const newDone = !s.done;
-    const updated = sets.map((set, idx) => idx === i ? { ...set, done: newDone } : set);
+    // doneAt es lo que permite armar el informe en el orden real en que
+    // entrenaste, y no en el orden en que la rutina lista los ejercicios.
+    const updated = sets.map((set, idx) =>
+      idx === i ? { ...set, done: newDone, doneAt: newDone ? Date.now() : null } : set
+    );
     if (newDone) {
       // Fija restTime en la sesión al usarlo, así la próxima sesión lo hereda
       onUpdate({ ...data, sets: updated, restTime: effectiveRest });

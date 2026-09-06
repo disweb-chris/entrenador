@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { DAYS, DEFAULT_EXERCISES, getDateKey, getTodayDayKey, makeEmptySet, Z } from "../lib/constants";
-import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getExerciseHistory } from "../lib/db";
+import { DAYS, DEFAULT_EXERCISES, getDateKey, getTodayDayKey, getNextDayKey, sortedExercises, makeEmptySet, Z } from "../lib/constants";
+import { saveSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getExerciseHistory, setUserProfile } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
 import { useWakeLock } from "../hooks/useWakeLock";
@@ -11,9 +11,12 @@ import ObjetivosTab from "./ObjetivosTab";
 export default function SessionView({ user, profile, onSignOut }) {
   const dateKey = getDateKey();
 
-  // Arranca en el día que toca hoy: abrir la app en el gym no debería costar un tap.
-  const [activeDay, setActiveDay] = useState(getTodayDayKey);
+  // Arranca en la sesión que toca según la rotación, no según el calendario:
+  // faltar un día no debería correr la rutina. Abrir la app no cuesta un tap.
+  const [activeDay, setActiveDay] = useState(() => getNextDayKey(profile, dateKey));
   const [activeDateKey, setActiveDateKey] = useState(dateKey);
+  // Si el usuario elige un día a mano, deja de ser la sugerencia de la rotación.
+  const [autoSelected, setAutoSelected] = useState(true);
   const [session, setSession] = useState(null);
   const [lastSession, setLastSession] = useState(null);
   const [targets, setTargets] = useState(null);
@@ -94,10 +97,11 @@ export default function SessionView({ user, profile, onSignOut }) {
     } else {
       const defaults = DEFAULT_EXERCISES[dayKey] || [];
       const exercises = {};
-      defaults.forEach(ex => {
+      defaults.forEach((ex, idx) => {
         // Hereda el descanso configurado en la sesión anterior de este día
         const prevRest = last?.exercises?.[ex.name]?.restTime ?? null;
-        exercises[ex.name] = { type: ex.type, sets: [makeEmptySet()], notes: "", restTime: prevRest };
+        // `order` explícito: Firestore devuelve las claves del map alfabetizadas.
+        exercises[ex.name] = { type: ex.type, order: idx, sets: [makeEmptySet()], notes: "", restTime: prevRest };
       });
       setSession({ exercises, sessionNotes: "" });
       setActiveDateKey(dateKey);
@@ -133,6 +137,8 @@ export default function SessionView({ user, profile, onSignOut }) {
         ...prev.exercises,
         [exName]: {
           type: newExType, sets: [makeEmptySet()], notes: "",
+          // Al final de la rutina, que es donde lo estás agregando.
+          order: Object.keys(prev.exercises || {}).length,
           restTime: lastSession?.exercises?.[exName]?.restTime ?? null,
         },
       },
@@ -171,6 +177,17 @@ export default function SessionView({ user, profile, onSignOut }) {
     });
     return { totalSets, doneSets, totalVol, pct: totalSets ? Math.round((doneSets / totalSets) * 100) : 0 };
   })();
+
+  // La rotación avanza con la primera serie registrada de la sesión: es la señal
+  // más confiable de que la hiciste, sin depender de que toques FINALIZAR.
+  const routineMarkedRef = useRef(false);
+  useEffect(() => { routineMarkedRef.current = false; }, [activeDay, activeDateKey]);
+  useEffect(() => {
+    if (routineMarkedRef.current || stats.doneSets === 0 || !activeDay) return;
+    routineMarkedRef.current = true;
+    setUserProfile(user.uid, { lastWorkedDay: activeDay, lastWorkedDate: activeDateKey })
+      .catch(err => console.error("No se pudo registrar el avance de la rutina:", err));
+  }, [stats.doneSets, activeDay, activeDateKey, user.uid]);
 
   function buildReport() {
     if (!session) return;
@@ -293,7 +310,7 @@ export default function SessionView({ user, profile, onSignOut }) {
       <div style={{ padding: "8px 18px", display: "flex", gap: "8px", overflowX: "auto", borderBottom: "1px solid #1a1a1a" }}>
         {DAYS.map(d => (
           <button key={d.key}
-            onClick={() => { setActiveDay(d.key); setView("session"); }}
+            onClick={() => { setActiveDay(d.key); setAutoSelected(false); setView("session"); }}
             style={{
               padding: "0 14px", minHeight: "44px", borderRadius: "6px", border: "1px solid",
               borderColor: activeDay === d.key ? "#f0f0f0" : "#1e1e1e",
@@ -312,6 +329,11 @@ export default function SessionView({ user, profile, onSignOut }) {
       <div style={{ padding: "14px 18px 8px", display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
         <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: "22px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
         <span style={{ color: "#888", fontSize: "13px", letterSpacing: "1px" }}>{dayInfo?.focus?.toUpperCase()}</span>
+        {/* Abrir en una sesión que no es la del calendario sin decir por qué
+            sería confuso: el sistema dice en qué estado está. */}
+        {autoSelected && activeDay !== getTodayDayKey() && (
+          <span style={{ color: "#888", fontSize: "12px", letterSpacing: "1px" }}>· TE TOCA ESTA</span>
+        )}
       </div>
 
       {/* VIEW TABS — fila propia: compartiendo línea con el título del día se
@@ -345,7 +367,9 @@ export default function SessionView({ user, profile, onSignOut }) {
         ) : view === "session" ? (
           <>
             <textarea
-              placeholder="Notas de la sesión (sueño, energía, contexto...)"
+              // El placeholder largo se partía en dos líneas y quedaba cortado
+              // dentro del alto de una fila.
+              placeholder="Notas de la sesión"
               value={sessionNotes}
               onChange={e => {
                 const value = e.target.value;
@@ -361,7 +385,7 @@ export default function SessionView({ user, profile, onSignOut }) {
               }}
             />
 
-            {Object.entries(session?.exercises || {}).map(([name, data]) => (
+            {sortedExercises(session?.exercises, activeDay).map(([name, data]) => (
               <ExerciseCard
                 key={name}
                 name={name}

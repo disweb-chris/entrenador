@@ -1,4 +1,29 @@
-import { DAYS, RIR_CONFIG, FATIGUE_CONFIG } from "./constants";
+import { DAYS, RIR_CONFIG, FATIGUE_CONFIG, sortedExercises } from "./constants";
+
+// Momento en que se registró la primera serie del ejercicio. null en sesiones
+// anteriores a que se guardara doneAt.
+function firstDoneAt(exData) {
+  const stamps = (exData?.sets || [])
+    .filter(s => s.done && typeof s.doneAt === "number")
+    .map(s => s.doneAt);
+  return stamps.length ? Math.min(...stamps) : null;
+}
+
+/**
+ * Ejercicios en el orden real en que se entrenaron. Los que no tienen marca de
+ * tiempo (sesiones viejas) conservan el orden de la rutina: sort es estable, así
+ * que devolver 0 mantiene el orden de entrada, y van después de los fechados.
+ */
+function inTrainedOrder(session, dayKey) {
+  return sortedExercises(session?.exercises, dayKey).sort((a, b) => {
+    const at = firstDoneAt(a[1]);
+    const bt = firstDoneAt(b[1]);
+    if (at === null && bt === null) return 0;
+    if (at === null) return 1;
+    if (bt === null) return -1;
+    return at - bt;
+  });
+}
 
 export function generateReport({ session, lastSession, dayKey, dateKey, sessionDuration, userName }) {
   const dayInfo = DAYS.find(d => d.key === dayKey);
@@ -39,8 +64,8 @@ export function generateReport({ session, lastSession, dayKey, dateKey, sessionD
   lines.push(``);
   lines.push(`────────────────────────────`);
 
-  // Per exercise
-  Object.entries(session.exercises || {}).forEach(([exName, exData]) => {
+  // Per exercise, en el orden en que se entrenaron
+  inTrainedOrder(session, dayKey).forEach(([exName, exData]) => {
     const sets = exData.sets || [];
     const done = sets.filter(s => s.done);
     if (!done.length) return;

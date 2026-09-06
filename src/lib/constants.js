@@ -114,3 +114,35 @@ export function getDateKey(date = new Date()) {
 export function makeEmptySet() {
   return { weight: "", reps: "", rir: null, fatigue: null, done: false, notes: "" };
 }
+
+// Los ejercicios viven en un map de Firestore, y Firestore devuelve las claves
+// de un map ordenadas alfabéticamente. Sin un índice explícito la rutina vuelve
+// alfabetizada ("Abdomen elevaciones" antes que "Abdominal"), tanto en la
+// pantalla como en el informe. `order` se guarda al crear la sesión; para las
+// sesiones viejas que no lo tienen se cae al orden en que el día los define.
+export function sortedExercises(exercises, dayKey) {
+  const defaults = DEFAULT_EXERCISES[dayKey] || [];
+  const fallback = new Map(defaults.map((ex, i) => [ex.name, i]));
+  return Object.entries(exercises || {}).sort(([aName, a], [bName, b]) => {
+    const ao = a?.order ?? fallback.get(aName) ?? Number.MAX_SAFE_INTEGER;
+    const bo = b?.order ?? fallback.get(bName) ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return aName.localeCompare(bName, "es");
+  });
+}
+
+/**
+ * Qué sesión toca abrir. Faltar un día no debería correr la rutina: si el lunes
+ * no fuiste, el martes te sigue tocando piernas. Se apoya en lastWorkedDay del
+ * perfil, que avanza al registrar la primera serie de una sesión.
+ */
+export function getNextDayKey(profile, todayDateKey = getDateKey()) {
+  const lastDay = profile?.lastWorkedDay;
+  const lastDate = profile?.lastWorkedDate;
+  if (!lastDay) return getTodayDayKey(); // sin historial, el día del calendario
+  // Ya entrenaste hoy: seguís en esa sesión, no en la siguiente.
+  if (lastDate === todayDateKey) return lastDay;
+  const i = DAYS.findIndex(d => d.key === lastDay);
+  if (i === -1) return getTodayDayKey();
+  return DAYS[(i + 1) % DAYS.length].key;
+}
