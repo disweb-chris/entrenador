@@ -1,3 +1,5 @@
+import { Z } from "../lib/constants";
+
 export default function RestTimer({ timer, onSkip, onAdjust }) {
   if (!timer.active && timer.remaining === 0 && timer.total === 0) return null;
 
@@ -16,12 +18,14 @@ export default function RestTimer({ timer, onSkip, onAdjust }) {
 
   return (
     <div style={{
-      position: "fixed", top: "16px", right: "16px", zIndex: 999,
+      position: "fixed", top: "16px", right: "16px", zIndex: Z.restTimer,
       background: "#111", border: `1px solid ${isWarning ? "#ef4444" : isDone ? "#22c55e" : "#333"}`,
-      borderRadius: "14px", padding: "14px 18px", minWidth: "168px",
-      boxShadow: `0 0 24px ${isWarning ? "rgba(239,68,68,0.2)" : "rgba(0,0,0,0.6)"}`,
+      // Sin box-shadow y radio 12: DESIGN.md define el sistema como plano, con
+      // el borde como única señal de profundidad, y fija 12px como techo.
+      // El estado de aviso ya lo lleva el color del borde.
+      borderRadius: "12px", padding: "14px 18px", minWidth: "168px",
       fontFamily: "'DM Mono', monospace",
-      transition: "border-color 0.3s, box-shadow 0.3s",
+      transition: "border-color 0.3s",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
         {/* Circular arc */}

@@ -69,20 +69,28 @@ export const DEFAULT_EXERCISES = {
 
 export const REST_DEFAULTS = { compound: 90, isolation: 60 };
 
+// Escala de apilado semántica: el cronómetro de descanso siempre por encima de
+// la barra de estado, sin números sueltos tipo 999.
+export const Z = { statusBar: 10, restTimer: 20 };
+
+// Los fondos son los de DESIGN.md sin cambios. El color de texto es el unico
+// que pasa WCAG AA (4.5:1) sobre cada fondo: blanco sobre naranja da 2.8:1 y
+// sobre verde 2.3:1, ilegibles bajo la luz de un gimnasio. Negro sobre rojo,
+// ademas, es la convencion de advertencia — no suaviza el estado de fallo.
 export const RIR_CONFIG = {
-  0: { bg: "#ef4444", text: "#fff", label: "0",   desc: "Fallo" },
-  1: { bg: "#f97316", text: "#fff", label: "1",   desc: "Objetivo" },
-  2: { bg: "#eab308", text: "#000", label: "2",   desc: "OK" },
-  3: { bg: "#22c55e", text: "#fff", label: "3",   desc: "Liviano" },
-  4: { bg: "#6b7280", text: "#fff", label: "4+",  desc: "Muy fácil" },
+  0: { bg: "#ef4444", text: "#0a0a0a", label: "0",   desc: "Fallo" },
+  1: { bg: "#f97316", text: "#0a0a0a", label: "1",   desc: "Objetivo" },
+  2: { bg: "#eab308", text: "#0a0a0a", label: "2",   desc: "OK" },
+  3: { bg: "#22c55e", text: "#0a0a0a", label: "3",   desc: "Liviano" },
+  4: { bg: "#6b7280", text: "#ffffff", label: "4+",  desc: "Muy fácil" },
 };
 
 export const FATIGUE_CONFIG = {
-  1: { bg: "#22c55e", text: "#fff", label: "1", desc: "Fresco" },
-  2: { bg: "#84cc16", text: "#000", label: "2", desc: "Leve" },
-  3: { bg: "#eab308", text: "#000", label: "3", desc: "Moderada" },
-  4: { bg: "#f97316", text: "#fff", label: "4", desc: "Alta" },
-  5: { bg: "#ef4444", text: "#fff", label: "5", desc: "Al límite" },
+  1: { bg: "#22c55e", text: "#0a0a0a", label: "1", desc: "Fresco" },
+  2: { bg: "#84cc16", text: "#0a0a0a", label: "2", desc: "Leve" },
+  3: { bg: "#eab308", text: "#0a0a0a", label: "3", desc: "Moderada" },
+  4: { bg: "#f97316", text: "#0a0a0a", label: "4", desc: "Alta" },
+  5: { bg: "#ef4444", text: "#0a0a0a", label: "5", desc: "Al límite" },
 };
 
 export function getArgentinaDate(date = new Date()) {
