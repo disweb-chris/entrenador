@@ -7,14 +7,18 @@ import SessionView from "./components/SessionView";
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = loading
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(undefined); // undefined = loading
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        const p = await getUserProfile(u.uid);
-        setProfile(p);
+        try {
+          setProfile(await getUserProfile(u.uid));
+        } catch (err) {
+          console.error("No se pudo leer el perfil:", err);
+          setProfile(null); // sin perfil la sesión abre en el día del calendario
+        }
       } else {
         setProfile(null);
       }
@@ -22,7 +26,9 @@ export default function App() {
     return unsub;
   }, []);
 
-  if (user === undefined) {
+  // El perfil decide qué sesión abrir (rotación), así que se espera a tenerlo:
+  // montar antes mostraría un día y saltaría a otro apenas llegue.
+  if (user === undefined || (user && profile === undefined)) {
     return (
       <div style={{
         minHeight: "100vh", background: "#0a0a0a", display: "flex",

@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import TargetRow from "./TargetRow";
+import { sortedExercises } from "../lib/constants";
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -206,7 +207,9 @@ export default function ObjetivosTab({
     );
   }
 
-  const exerciseNames = Object.keys(session.exercises);
+  // Mismo orden que la pantalla de sesión: Firestore devolvería las claves
+  // del map alfabetizadas y los objetivos quedarían desalineados con la rutina.
+  const exerciseNames = sortedExercises(session.exercises, activeDay).map(([name]) => name);
 
   // ── Segmented control ─────────────────────────────────────────────────────────
 
