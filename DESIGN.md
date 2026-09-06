@@ -252,6 +252,22 @@ Fixed top-right floating panel. Surfaces mid-rest without covering the set row.
 - Text in SVG: Bebas Neue 20px — one of the two permitted Bebas Neue uses (displaying a large number mid-session qualifies as volume display).
 - Dismiss behavior: pressing CERRAR or SALTEAR resets the timer completely (`total = 0`) and removes the panel.
 
+### SessionPicker
+
+Overlay for reviewing or correcting past sessions. It hangs off the date in the header, not off the HOY / INFORME / OBJETIVOS row: moving between sessions is navigation, not another view of the current one.
+
+- Backdrop `rgba(10,10,10,0.82)`, panel `#111` with `1px solid #1e1e1e`, radius 12px, `z-index: Z.picker`
+- Rows are 56px tall: date (`#f0f0f0`), focus (`#888`, truncated), sets · volume (`#888`), and a green `HOY` marker on today's
+- Only sessions with completed sets are listed — an empty session is not history
+- While a past session is open, the header date and a band above the day title turn `#eab308` — `EDITANDO UNA SESIÓN ANTERIOR`, with a way back. The band uses the documented surface and divider; the yellow text carries the state, no tinted background. Editing yesterday without knowing it is the failure this prevents.
+
+### Records
+
+- Standing record renders in the reference block as `Récord: 82.5kg × 8 · 1RM 104kg` in `#888`
+- Beating it swaps the line to `★ RÉCORD: …` in `#22c55e` with the previous mark for contrast
+- Records are measured by estimated 1RM (Epley), never raw weight: 5×100 and 8×90 are not comparable by weight alone. The formula is not applied above 12 reps, where it overstates, nor at 1 rep, where the lift already is the max.
+- With no prior mark nothing is announced: everything would be a record in week one and the signal would stop meaning anything.
+
 ### Navigation / Day Selector
 
 - Horizontal scroll row, no scrollbar

@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { RIR_CONFIG, FATIGUE_CONFIG, REST_DEFAULTS, makeEmptySet } from "../lib/constants";
 import { suggestProgression, SUGGESTION_COLOR } from "../lib/progression";
 import ProgressionChart from "./ProgressionChart";
+import { recordStatus, formatMark, roundKg } from "../lib/records";
 
-export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest, loadHistory }) {
+export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest, loadHistory, best }) {
   const [showNotes, setShowNotes] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [history, setHistory] = useState(null);
@@ -16,6 +17,10 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
 
   // Qué tocaría hacer hoy según cómo se sintió la sesión anterior.
   const suggestion = useMemo(() => suggestProgression(lastData, type), [lastData, type]);
+
+  // Récord: el 1RM estimado permite comparar 5×100 contra 8×90, que en peso
+  // bruto no son comparables.
+  const record = useMemo(() => recordStatus(sets, best), [sets, best]);
 
   useEffect(() => {
     if (didAutoFill.current) return;
@@ -174,6 +179,26 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
               → Hoy: {suggestion.weight}kg × {suggestion.reps} · {suggestion.reason}
             </div>
           )}
+          {record.isRecord ? (
+            <div style={{ color: "#22c55e", marginTop: "5px" }}>
+              ★ RÉCORD: {formatMark(record.current)}
+              {record.previous && ` · antes ${roundKg(record.previous.e1rm)}kg`}
+            </div>
+          ) : record.previous && (
+            <div style={{ color: "#888", marginTop: "5px" }}>
+              Récord: {formatMark(record.previous)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sin sesión anterior el bloque de referencia no se dibuja, pero el
+          récord sigue siendo información útil. */}
+      {lastSets.length === 0 && (record.isRecord || record.previous) && (
+        <div style={{ fontSize: "12px", marginBottom: "10px", padding: "8px 10px", background: "#0d0d0d", borderRadius: "6px", letterSpacing: "0.5px", color: record.isRecord ? "#22c55e" : "#888" }}>
+          {record.isRecord
+            ? `★ RÉCORD: ${formatMark(record.current)}`
+            : `Récord: ${formatMark(record.previous)}`}
         </div>
       )}
 

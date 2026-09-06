@@ -57,17 +57,33 @@ export async function getLastSession(uid, dayKey, beforeDate) {
   return snap.docs[0].data();
 }
 
-export async function getExerciseHistory(uid, exerciseName, limitN = 10) {
+/**
+ * Sesiones recientes, más nuevas primero. Una sola lectura alimenta los récords,
+ * el historial y los gráficos: antes cada gráfico disparaba su propia consulta
+ * de 30 documentos.
+ *
+ * Requiere el índice compuesto (uid, dateKey desc) — ver firestore.indexes.json.
+ */
+export async function getRecentSessions(uid, limitN = 60) {
   const q = query(
     collection(db, "sessions"),
     where("uid", "==", uid),
     orderBy("dateKey", "desc"),
-    limit(30)
+    limit(limitN)
   );
   const snap = await getDocs(q);
+  return snap.docs.map(d => d.data());
+}
+
+export async function getExerciseHistory(uid, exerciseName, limitN = 10) {
+  const sessions = await getRecentSessions(uid, 30);
+  return exerciseHistoryFrom(sessions, exerciseName, limitN);
+}
+
+/** Serie temporal de un ejercicio a partir de sesiones ya cargadas. */
+export function exerciseHistoryFrom(sessions, exerciseName, limitN = 10) {
   const results = [];
-  snap.docs.forEach(d => {
-    const session = d.data();
+  (sessions || []).forEach(session => {
     const ex = session.exercises?.[exerciseName];
     if (ex) {
       const doneSets = (ex.sets || []).filter(s => s.done && s.weight);

@@ -71,7 +71,7 @@ export const REST_DEFAULTS = { compound: 90, isolation: 60 };
 
 // Escala de apilado semántica: el cronómetro de descanso siempre por encima de
 // la barra de estado, sin números sueltos tipo 999.
-export const Z = { statusBar: 10, restTimer: 20 };
+export const Z = { statusBar: 10, restTimer: 20, picker: 30 };
 
 // Los fondos son los de DESIGN.md sin cambios. El color de texto es el unico
 // que pasa WCAG AA (4.5:1) sobre cada fondo: blanco sobre naranja da 2.8:1 y
