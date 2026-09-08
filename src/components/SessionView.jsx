@@ -10,6 +10,7 @@ import RestTimer from "./RestTimer";
 import ObjetivosTab from "./ObjetivosTab";
 import SessionPicker from "./SessionPicker";
 import { computeBests } from "../lib/records";
+import { stagnationStatus } from "../lib/stagnation";
 
 export default function SessionView({ user, profile, onSignOut }) {
   const dateKey = getDateKey();
@@ -270,6 +271,19 @@ export default function SessionView({ user, profile, onSignOut }) {
     setViewDate(picked.dateKey === dateKey ? null : picked.dateKey);
   }
 
+  // Se calcula sobre el historial ya cargado, excluyendo la sesión en curso:
+  // una sesión a medio registrar cortaría la racha antes de tiempo.
+  const stagnations = useMemo(() => {
+    if (!recent || !session) return {};
+    const past = recent.filter(s => s.dateKey !== activeDateKey);
+    const out = {};
+    for (const name of Object.keys(session.exercises || {})) {
+      const st = stagnationStatus(name, past);
+      if (st) out[name] = st;
+    }
+    return out;
+  }, [recent, session, activeDateKey]);
+
   function buildReport() {
     if (!session) return;
     const text = generateReport({
@@ -280,6 +294,7 @@ export default function SessionView({ user, profile, onSignOut }) {
       sessionDuration: sessionTimer.formatted,
       userName: profile?.name || user.email,
       bests,
+      stagnations,
     });
     setReportText(text);
     setView("report");
@@ -550,6 +565,7 @@ export default function SessionView({ user, profile, onSignOut }) {
                 onStartRest={handleStartRest}
                 loadHistory={loadHistory}
                 best={bests[name]}
+                stagnation={stagnations[name]}
               />
             ))}
 

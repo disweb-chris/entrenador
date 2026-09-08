@@ -2,12 +2,18 @@
 // el 1RM estimado es lo que permite comparar una serie de 5×100 con una de 8×90,
 // que en peso bruto no son comparables.
 
-// Epley. Pierde precisión por encima de ~12 reps — ahí sobreestima bastante —
-// así que fuera de ese rango se prefiere no opinar antes que dar un número malo.
+// Epley. Como estimación absoluta pierde precisión pasadas las ~12 reps, pero
+// acá sólo se compara un ejercicio contra sí mismo, y para eso lo que importa
+// es que sea monótona: subir de 10×10 a 10×13 tiene que leerse como progreso.
+// Cortar en 12 descartaba justo las mejores series de quien progresa sumando
+// repeticiones. El corte queda en 20, donde la fórmula deja de significar algo
+// y además empiezan los ejercicios de tiempo anotados como reps (planchas).
+const MAX_REPS = 20;
+
 export function estimate1RM(weight, reps) {
   const w = parseFloat(weight);
   const r = parseInt(reps);
-  if (!w || !r || w <= 0 || r < 1 || r > 12) return null;
+  if (!w || !r || w <= 0 || r < 1 || r > MAX_REPS) return null;
   // Una sola repetición ya ES el máximo: aplicarle la fórmula lo infla un 3.3%
   // y bastaría para anunciar un récord que no ocurrió.
   if (r === 1) return w;

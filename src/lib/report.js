@@ -1,5 +1,6 @@
 import { DAYS, RIR_CONFIG, FATIGUE_CONFIG, sortedExercises } from "./constants";
 import { recordStatus, formatMark } from "./records";
+import { stagnationLabel } from "./stagnation";
 
 // Momento en que se registró la primera serie del ejercicio. null en sesiones
 // anteriores a que se guardara doneAt.
@@ -26,7 +27,7 @@ function inTrainedOrder(session, dayKey) {
   });
 }
 
-export function generateReport({ session, lastSession, dayKey, dateKey, sessionDuration, userName, bests }) {
+export function generateReport({ session, lastSession, dayKey, dateKey, sessionDuration, userName, bests, stagnations }) {
   const dayInfo = DAYS.find(d => d.key === dayKey);
   const lines = [];
 
@@ -105,6 +106,13 @@ export function generateReport({ session, lastSession, dayKey, dateKey, sessionD
       lines.push(`  ★ RÉCORD: ${formatMark(rec.current)} (anterior ${formatMark(rec.previous)})`);
     } else if (rec.current) {
       lines.push(`  1RM estimado: ${Math.round(rec.current.e1rm * 2) / 2}kg`);
+    }
+
+    // El estancamiento es justamente lo que se quiere ver al leer el informe
+    // después: qué ejercicios llevan semanas sin moverse y en qué condiciones.
+    const stag = stagnations?.[exName];
+    if (stag && !rec.isRecord) {
+      lines.push(`  ⚠ ${stagnationLabel(stag)} (récord del ${stag.bestDate})`);
     }
 
     // RIR 0 flag

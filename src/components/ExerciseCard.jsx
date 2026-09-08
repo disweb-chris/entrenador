@@ -3,8 +3,9 @@ import { RIR_CONFIG, FATIGUE_CONFIG, REST_DEFAULTS, makeEmptySet } from "../lib/
 import { suggestProgression, SUGGESTION_COLOR } from "../lib/progression";
 import ProgressionChart from "./ProgressionChart";
 import { recordStatus, formatMark, roundKg } from "../lib/records";
+import { stagnationLabel } from "../lib/stagnation";
 
-export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest, loadHistory, best }) {
+export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest, loadHistory, best, stagnation }) {
   const [showNotes, setShowNotes] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [history, setHistory] = useState(null);
@@ -189,6 +190,11 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
           ) : record.previous && (
             <div style={{ color: "#888", marginTop: "5px" }}>
               Récord: {formatMark(record.previous)}
+            </div>
+          )}
+          {!record.isRecord && stagnation && (
+            <div style={{ color: "#eab308", marginTop: "5px" }}>
+              ⚠ {stagnationLabel(stagnation)}
             </div>
           )}
         </div>

@@ -277,6 +277,16 @@ Overlay for reviewing or correcting past sessions. It hangs off the date in the 
 - Records are measured by estimated 1RM (Epley), never raw weight: 5×100 and 8×90 are not comparable by weight alone. The formula is not applied above 12 reps, where it overstates, nor at 1 rep, where the lift already is the max.
 - With no prior mark nothing is announced: everything would be a record in week one and the signal would stop meaning anything.
 
+### Stagnation
+
+Sits under the record line in the reference block, in `#eab308`, and only when there is something to say: three or more sessions since the exercise last beat its own record.
+
+- `⚠ 4 sesiones sin superar el récord, yendo al fallo` — stuck at RIR ≤ 1
+- `⚠ 4 sesiones sin superar el récord, con RIR de sobra` — stuck with margin left
+- Without RIR logged it states the fact and stops there
+
+The two readings call for opposite responses, which is the whole point of separating them. The wording states what the numbers show and stops; prescribing the training is not the app's job.
+
 ### Navigation / Day Selector
 
 - Horizontal scroll row, no scrollbar
