@@ -13,6 +13,17 @@ export async function setUserProfile(uid, data) {
   await setDoc(doc(db, "users", uid), data, { merge: true });
 }
 
+// La rutina del usuario. Antes vivía hardcodeada en constants: cambiar el
+// orden o sacar un ejercicio de forma permanente exigía desplegar.
+export async function getRoutine(uid) {
+  const snap = await getDoc(doc(db, "routines", uid));
+  return snap.exists() ? (snap.data().days || null) : null;
+}
+
+export async function saveRoutine(uid, days) {
+  await setDoc(doc(db, "routines", uid), { uid, days, updatedAt: Date.now() });
+}
+
 export function sessionId(uid, dateKey, dayKey) {
   return `${uid}_${dateKey}_${dayKey}`;
 }

@@ -252,6 +252,15 @@ Fixed top-right floating panel. Surfaces mid-rest without covering the set row.
 - Text in SVG: Bebas Neue 20px — one of the two permitted Bebas Neue uses (displaying a large number mid-session qualifies as volume display).
 - Dismiss behavior: pressing CERRAR or SALTEAR resets the timer completely (`total = 0`) and removes the panel.
 
+### Routine editing (paste)
+
+The routine lives in the user's data (`routines/{uid}`), not in code. The paste panel in the routine tab accepts a JSON where **the array order is the exercise order** — no explicit index field, which is the first thing to desynchronise when the JSON is edited by hand.
+
+- Routine fields (`nombre`, `tipo`, `descanso`, `notas`, position) are permanent; a nested `objetivo` is routed to that week's targets instead
+- Applying replaces the day in full. The preview lists additions in `#22c55e`, removals in `#eab308`, plus reordering and rest changes — replacing a day without seeing what goes would be too sharp an edge
+- Changes take effect from that day's next session, and logged sets are never touched
+- The older formats (flat target JSON, `Press: 3x8@80kg` line by line) still parse
+
 ### SessionPicker
 
 Overlay for reviewing or correcting past sessions. It hangs off the date in the header, not off the HOY / INFORME / OBJETIVOS row: moving between sessions is navigation, not another view of the current one.

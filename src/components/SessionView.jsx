@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { DAYS, DEFAULT_EXERCISES, getDateKey, getTodayDayKey, getNextDayKey, sortedExercises, makeEmptySet, Z } from "../lib/constants";
-import { saveSession, getSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getRecentSessions, exerciseHistoryFrom, setUserProfile } from "../lib/db";
+import { DAYS, getDateKey, getTodayDayKey, getNextDayKey, sortedExercises, Z } from "../lib/constants";
+import { withDefaults, seedRoutine, sessionExercisesFromRoutine } from "../lib/routine";
+import { saveSession, getSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getRecentSessions, exerciseHistoryFrom, setUserProfile, getRoutine, saveRoutine } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
 import { useWakeLock } from "../hooks/useWakeLock";
@@ -38,6 +39,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   const [recent, setRecent] = useState(null);
   const [recentError, setRecentError] = useState(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [routine, setRoutine] = useState(null);
 
   const timer = useRestTimer();
   const sessionTimer = useSessionTimer();
@@ -50,6 +52,10 @@ export default function SessionView({ user, profile, onSignOut }) {
   const saveTimerRef = useRef(null);
   const pendingRef = useRef(null);
   const skipSaveRef = useRef(true);
+  // Sólo se persiste una sesión que el usuario tocó. El autocompletado de
+  // pesos escribía por su cuenta, así que abrir un día para mirarlo dejaba
+  // una sesión guardada sin haber entrenado.
+  const touchedRef = useRef(false);
 
   const flushSave = useCallback(() => {
     clearTimeout(saveTimerRef.current);
@@ -63,6 +69,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   useEffect(() => {
     if (!session || !activeDay) return;
     if (skipSaveRef.current) { skipSaveRef.current = false; return; }
+    if (!touchedRef.current) return; // nada que el usuario haya hecho todavía
     pendingRef.current = { uid: user.uid, dateKey: activeDateKey, dayKey: activeDay, session };
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(flushSave, 800);
@@ -78,8 +85,9 @@ export default function SessionView({ user, profile, onSignOut }) {
 
   useEffect(() => {
     if (!activeDay) { setLoading(false); return; }
+    if (!routine) return; // sin rutina una sesión nueva saldría sin ejercicios
     loadDay(activeDay, viewDate);
-  }, [activeDay, viewDate]);
+  }, [activeDay, viewDate, routine]);
 
   // Historial completo: alimenta los récords, el selector de sesiones y los
   // gráficos con una sola lectura en vez de una consulta por ejercicio.
@@ -100,6 +108,20 @@ export default function SessionView({ user, profile, onSignOut }) {
       });
     return () => { cancelled = true; };
   }, [user.uid]);
+
+  // La rutina se lee después del historial: quien todavía no tiene una guardada
+  // recibe la sembrada desde sus propias sesiones, que es su rutina real.
+  useEffect(() => {
+    if (recent === null) return;
+    let cancelled = false;
+    getRoutine(user.uid)
+      .then(days => { if (!cancelled) setRoutine(days ? withDefaults(days) : seedRoutine(recent)); })
+      .catch(err => {
+        console.error("No se pudo leer la rutina:", err);
+        if (!cancelled) setRoutine(seedRoutine(recent));
+      });
+    return () => { cancelled = true; };
+  }, [user.uid, recent]);
 
   /**
    * Carga una sesión. Sin `targetDate` es la de hoy; con `targetDate` es una
@@ -128,20 +150,19 @@ export default function SessionView({ user, profile, onSignOut }) {
     const last = await getLastSession(user.uid, dayKey, viewingDate);
 
     skipSaveRef.current = true; // lo que viene de la DB no hay que re-escribirlo
+    touchedRef.current = false;
     if (loaded) {
       setSession(loaded);
       setActiveDateKey(viewingDate);
       setSessionNotes(loaded.sessionNotes || "");
     } else {
-      const defaults = DEFAULT_EXERCISES[dayKey] || [];
-      const exercises = {};
-      defaults.forEach((ex, idx) => {
-        // Hereda el descanso configurado en la sesión anterior de este día
-        const prevRest = last?.exercises?.[ex.name]?.restTime ?? null;
-        // `order` explícito: Firestore devuelve las claves del map alfabetizadas.
-        exercises[ex.name] = { type: ex.type, order: idx, sets: [makeEmptySet()], notes: "", restTime: prevRest };
+      // La sesión se arma desde la rutina del usuario: orden, tipo, descanso y
+      // cuántas series pre-crear salen de ahí.
+      const baseTargets = tgts || lastTgts || {};
+      setSession({
+        exercises: sessionExercisesFromRoutine(routine?.[dayKey], { lastSession: last, targets: baseTargets }),
+        sessionNotes: "",
       });
-      setSession({ exercises, sessionNotes: "" });
       setActiveDateKey(viewingDate);
       setSessionNotes("");
     }
@@ -155,11 +176,13 @@ export default function SessionView({ user, profile, onSignOut }) {
 
   // Updates funcionales: varios ExerciseCard pueden actualizar en el mismo
   // ciclo (ej. auto-fill al montar) sin pisarse entre sí.
-  function updateExercise(name, data) {
+  function updateExercise(name, data, { autofill = false } = {}) {
+    if (!autofill) touchedRef.current = true;
     setSession(prev => ({ ...prev, exercises: { ...prev.exercises, [name]: data } }));
   }
 
   function deleteExercise(name) {
+    touchedRef.current = true;
     setSession(prev => {
       const { [name]: _, ...rest } = prev.exercises;
       return { ...prev, exercises: rest };
@@ -169,6 +192,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   function addExercise() {
     const exName = newExName.trim();
     if (!exName) return;
+    touchedRef.current = true;
     setSession(prev => ({
       ...prev,
       exercises: {
@@ -280,6 +304,25 @@ export default function SessionView({ user, profile, onSignOut }) {
     overwriteTargets(user.uid, getWeekKey(), rest);
   }
 
+  /**
+   * Aplica una rutina pegada. Reemplaza los días que vengan en el JSON y deja
+   * intactos los demás; los cambios entran en la próxima sesión de cada día,
+   * así que lo que estés entrenando ahora no se mueve bajo tus pies.
+   */
+  function handleRoutineChange(days) {
+    const merged = { ...(routine || {}) };
+    for (const [dayKey, dayRoutine] of Object.entries(days)) {
+      merged[dayKey] = {
+        // El foco es opcional en el JSON: si no viene, se conserva el vigente.
+        foco: dayRoutine.foco ?? merged[dayKey]?.foco,
+        ejercicios: dayRoutine.ejercicios,
+      };
+    }
+    setRoutine(merged);
+    saveRoutine(user.uid, merged)
+      .catch(err => console.error("No se pudo guardar la rutina:", err));
+  }
+
   function handleTargetsMerge(newTargets) {
     const merged = { ...(targets || {}), ...newTargets };
     setTargets(merged);
@@ -326,7 +369,7 @@ export default function SessionView({ user, profile, onSignOut }) {
             en pantallas de 320px, y competía con las cifras que son el contenido. */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px" }}>
           <div style={{ fontFamily: "'Bebas Neue'", fontSize: "26px", letterSpacing: "4px", lineHeight: 1, flexShrink: 0 }}>OVERLOAD</div>
-          <div style={{ fontFamily: "'Bebas Neue'", fontSize: "28px", lineHeight: 1, color: stats.totalVol > 0 ? "#f0f0f0" : "#555" }}>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: "28px", lineHeight: 1, color: stats.totalVol > 0 ? "#f0f0f0" : "#888" }}>
             {stats.totalVol > 0 ? `${stats.totalVol.toLocaleString()}kg` : "—"}
           </div>
         </div>
@@ -433,7 +476,9 @@ export default function SessionView({ user, profile, onSignOut }) {
       {/* DAY TITLE */}
       <div style={{ padding: "14px 18px 8px", display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
         <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 500, fontSize: "22px", letterSpacing: "2px" }}>{dayInfo?.full}</span>
-        <span style={{ color: "#888", fontSize: "13px", letterSpacing: "1px" }}>{dayInfo?.focus?.toUpperCase()}</span>
+        <span style={{ color: "#888", fontSize: "13px", letterSpacing: "1px" }}>
+          {(routine?.[activeDay]?.foco || dayInfo?.focus || "").toUpperCase()}
+        </span>
         {/* Abrir en una sesión que no es la del calendario sin decir por qué
             sería confuso: el sistema dice en qué estado está. */}
         {autoSelected && activeDay !== getTodayDayKey() && (
@@ -498,7 +543,9 @@ export default function SessionView({ user, profile, onSignOut }) {
                 data={data}
                 lastData={lastSession?.exercises?.[name]}
                 target={targets?.[name]}
-                onUpdate={(updated) => updateExercise(name, updated)}
+                // Reenvía las opciones: descartarlas hacía pasar el
+                // autocompletado por una edición del usuario y se guardaba.
+                onUpdate={(updated, opts) => updateExercise(name, updated, opts)}
                 onDelete={() => deleteExercise(name)}
                 onStartRest={handleStartRest}
                 loadHistory={loadHistory}
@@ -579,6 +626,8 @@ export default function SessionView({ user, profile, onSignOut }) {
             targets={targets}
             activeDay={activeDay}
             weekKey={getWeekKey()}
+            routine={routine}
+            onRoutineChange={handleRoutineChange}
             onTargetChange={handleTargetChange}
             onTargetRemove={handleTargetRemove}
             onTargetsMerge={handleTargetsMerge}

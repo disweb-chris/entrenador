@@ -1,122 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import TargetRow from "./TargetRow";
-import { sortedExercises } from "../lib/constants";
-
-// ── Parser ────────────────────────────────────────────────────────────────────
-
-function parseSpec(spec) {
-  if (!spec) return null;
-  const s = spec.trim();
-
-  // "3x8@80kg", "3x8 @ 80.5", "3×8@80"
-  const m1 = s.match(/^(\d+)\s*[x×X]\s*(\d+)(?:\s*[@a]\s*([\d.]+))?/i);
-  if (m1) {
-    return {
-      series: parseInt(m1[1]),
-      reps: parseInt(m1[2]),
-      peso: m1[3] ? parseFloat(m1[3]) : null,
-    };
-  }
-
-  // "3 series de 8 reps con 80kg"  /  "3 series x 8 a 80kg"
-  const m2 = s.match(/(\d+)\s*series?\s*(?:de|x|×|por)?\s*(\d+)\s*(?:reps?)?\s*(?:con|@|a|de)\s*([\d.]+)/i);
-  if (m2) {
-    return {
-      series: parseInt(m2[1]),
-      reps: parseInt(m2[2]),
-      peso: parseFloat(m2[3]),
-    };
-  }
-
-  // "3 series de 8" (no weight)
-  const m3 = s.match(/(\d+)\s*series?\s*(?:de|x|×|por)?\s*(\d+)\s*(?:reps?)?/i);
-  if (m3) {
-    return {
-      series: parseInt(m3[1]),
-      reps: parseInt(m3[2]),
-      peso: null,
-    };
-  }
-
-  return null;
-}
-
-function parseTargetText(raw) {
-  const text = raw.trim();
-  if (!text) return { items: [], errors: [] };
-
-  // JSON path
-  if (text.startsWith("{")) {
-    try {
-      const obj = JSON.parse(text);
-      if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-        // Support wrapper format: { semana, targets: { ... } }
-        const exercises = (obj.targets && typeof obj.targets === "object" && !Array.isArray(obj.targets))
-          ? obj.targets
-          : obj;
-        const items = [];
-        const errors = [];
-        for (const [name, val] of Object.entries(exercises)) {
-          const n = name.trim();
-          if (!n) continue;
-          if (!val || typeof val !== "object") {
-            errors.push(`"${n}": valor no reconocido`);
-            continue;
-          }
-          const series = val.series ?? val.sets ?? null;
-          const peso = val.peso ?? val.weight ?? val.kg ?? null;
-          const target = {
-            series: series != null ? Number(series) : null,
-            peso: peso != null ? Number(peso) : null,
-          };
-          if (Array.isArray(val.reps_por_serie) && val.reps_por_serie.length > 0) {
-            target.reps_por_serie = val.reps_por_serie.map(Number);
-          } else {
-            const reps = val.reps ?? null;
-            target.reps = reps != null ? Number(reps) : null;
-          }
-          items.push({ name: n, target });
-        }
-        return { items, errors };
-      }
-    } catch {}
-  }
-
-  // Line-by-line path
-  const items = [];
-  const errors = [];
-
-  for (let line of text.split("\n")) {
-    line = line.trim().replace(/^[-*•]\s*/, ""); // strip markdown bullets
-    if (!line || line.startsWith("#") || line.startsWith("//")) continue;
-
-    const colonIdx = line.indexOf(":");
-    if (colonIdx === -1) {
-      // Try "Name 3x8@80kg" (no colon)
-      const m = line.match(/^(.+?)\s+(\d+\s*[x×X]\s*\d+.*)$/i);
-      if (m) {
-        const parsed = parseSpec(m[2]);
-        if (parsed) { items.push({ name: m[1].trim(), target: parsed }); continue; }
-      }
-      errors.push(`Sin separador: "${line}"`);
-      continue;
-    }
-
-    const name = line.slice(0, colonIdx).trim();
-    const spec = line.slice(colonIdx + 1).trim();
-
-    if (!name) { errors.push(`Nombre vacío: "${line}"`); continue; }
-
-    const parsed = parseSpec(spec);
-    if (parsed) {
-      items.push({ name, target: parsed });
-    } else {
-      errors.push(`"${name}": no reconocido ("${spec}")`);
-    }
-  }
-
-  return { items, errors };
-}
+import { sortedExercises, DAYS } from "../lib/constants";
+import { parseRoutineText } from "../lib/routineParser";
+import { diffRoutineDay } from "../lib/routine";
 
 function targetLabel(t) {
   if (!t) return "—";
@@ -128,6 +14,9 @@ function targetLabel(t) {
   return parts.join("") || "—";
 }
 
+const previewRow = { display: "flex", gap: "8px", alignItems: "baseline", marginBottom: "4px", lineHeight: 1.4 };
+const previewName = { fontSize: "13px", fontFamily: "'DM Mono', monospace", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ObjetivosTab({
@@ -135,9 +24,11 @@ export default function ObjetivosTab({
   targets,
   activeDay,
   weekKey,
+  routine,
   onTargetChange,
   onTargetRemove,
   onTargetsMerge,
+  onRoutineChange,
 }) {
   const [mode, setMode] = useState("edit");
   const [pasteText, setPasteText] = useState("");
@@ -146,8 +37,21 @@ export default function ObjetivosTab({
   const applyTimerRef = useRef(null);
   const textareaRef = useRef(null);
 
-  const parseResult = useMemo(() => parseTargetText(pasteText), [pasteText]);
-  const hasItems = parseResult.items.length > 0;
+  const parsed = useMemo(() => parseRoutineText(pasteText), [pasteText]);
+  const targetEntries = useMemo(() => Object.entries(parsed.targets), [parsed]);
+
+  // Qué cambia en la rutina de cada día que venga en el texto pegado.
+  const routineDiffs = useMemo(() => {
+    if (!parsed.routine) return [];
+    return Object.entries(parsed.routine).map(([dayKey, next]) => ({
+      dayKey,
+      label: DAYS.find(d => d.key === dayKey)?.full || dayKey,
+      count: next.ejercicios.length,
+      diff: diffRoutineDay(routine?.[dayKey], next),
+    }));
+  }, [parsed, routine]);
+
+  const hasItems = targetEntries.length > 0 || routineDiffs.length > 0;
 
   // Focus textarea when switching to paste mode
   useEffect(() => {
@@ -169,22 +73,28 @@ export default function ObjetivosTab({
 
   function handleApply() {
     if (!hasItems) return;
-    const newTargets = {};
-    for (const { name, target } of parseResult.items) newTargets[name] = target;
-    onTargetsMerge(newTargets);
 
-    const n = parseResult.items.length;
-    const e = parseResult.errors.length;
+    // La rutina reemplaza el día completo; los objetivos se fusionan, porque
+    // pueden venir de un pegado parcial.
+    if (parsed.routine) onRoutineChange(parsed.routine);
+    if (targetEntries.length) onTargetsMerge(parsed.targets);
+
+    const partes = [];
+    if (routineDiffs.length) {
+      partes.push(`${routineDiffs.length} ${routineDiffs.length === 1 ? "día" : "días"} de rutina`);
+    }
+    if (targetEntries.length) {
+      partes.push(`${targetEntries.length} ${targetEntries.length === 1 ? "objetivo" : "objetivos"}`);
+    }
+    const e = parsed.errors.length;
 
     if (e === 0) {
       setApplyStatus("ok");
-      setApplyMsg(`✓ ${n} ${n === 1 ? "ejercicio" : "ejercicios"} aplicados`);
-      applyTimerRef.current = setTimeout(() => {
-        switchMode("edit");
-      }, 1400);
+      setApplyMsg(`✓ ${partes.join(" · ")}`);
+      applyTimerRef.current = setTimeout(() => switchMode("edit"), 1600);
     } else {
       setApplyStatus("partial");
-      setApplyMsg(`${n} aplicados · ${e} con error`);
+      setApplyMsg(`${partes.join(" · ")} · ${e} con error`);
     }
   }
 
@@ -272,7 +182,7 @@ export default function ObjetivosTab({
             ref={textareaRef}
             value={pasteText}
             onChange={e => { setPasteText(e.target.value); setApplyStatus(null); }}
-            placeholder={"Pegá el texto de Claude:\n\nPress Plano: 3x8@80kg\nSentadilla: 4x5@100kg\nPeso Muerto: 3x8\n\nTambién acepta JSON."}
+            placeholder={"Pegá lo que te pasa Claude.\n\nRutina completa (orden, tipo, descanso y objetivo):\n{\"rutina\": {\"lunes\": {\"ejercicios\": [...]}}}\n\nO sólo objetivos, una línea por ejercicio:\nPress Plano: 3x8@80kg\nSentadilla: 4x5@100kg"}
             style={{
               width: "100%",
               minHeight: "160px",
@@ -302,31 +212,67 @@ export default function ObjetivosTab({
               borderRadius: "6px",
               border: "1px solid #1a1a1a",
             }}>
-              {parseResult.items.map(({ name, target }) => (
-                <div key={name} style={{
-                  display: "flex", gap: "8px", alignItems: "baseline",
-                  marginBottom: "4px", lineHeight: 1.4,
-                }}>
-                  <span style={{ color: "#22c55e", fontSize: "11px", flexShrink: 0 }}>✓</span>
-                  <span style={{ color: "#cccccc", fontSize: "13px", fontFamily: "'DM Mono', monospace", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {name}
-                  </span>
+              {/* Reemplazar un día entero sin ver qué se da de baja sería
+                  demasiado filoso: el preview lo dice antes de aplicar. */}
+              {routineDiffs.map(({ dayKey, label, count, diff }) => (
+                <div key={dayKey} style={{ marginBottom: "10px" }}>
+                  <div style={{ ...previewRow, color: "#f0f0f0" }}>
+                    <span style={{ color: "#22c55e", fontSize: "11px", flexShrink: 0 }}>✓</span>
+                    <span style={{ ...previewName, color: "#f0f0f0", letterSpacing: "1px" }}>
+                      {label.toUpperCase()}
+                    </span>
+                    <span style={{ color: "#888", fontSize: "12px", flexShrink: 0 }}>
+                      {count} {count === 1 ? "ejercicio" : "ejercicios"}
+                    </span>
+                  </div>
+                  {diff.added.length > 0 && (
+                    <div style={{ ...previewRow, paddingLeft: "19px", color: "#22c55e", fontSize: "12px" }}>
+                      + {diff.added.join(", ")}
+                    </div>
+                  )}
+                  {diff.removed.length > 0 && (
+                    <div style={{ ...previewRow, paddingLeft: "19px", color: "#eab308", fontSize: "12px" }}>
+                      − se quitan: {diff.removed.join(", ")}
+                    </div>
+                  )}
+                  {diff.reordered && (
+                    <div style={{ ...previewRow, paddingLeft: "19px", color: "#888", fontSize: "12px" }}>
+                      · cambia el orden
+                    </div>
+                  )}
+                  {diff.restChanged.length > 0 && (
+                    <div style={{ ...previewRow, paddingLeft: "19px", color: "#888", fontSize: "12px" }}>
+                      · descanso: {diff.restChanged.map(r => `${r.nombre} ${r.de}→${r.a}s`).join(", ")}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {targetEntries.map(([name, target]) => (
+                <div key={name} style={previewRow}>
+                  <span style={{ color: "#3b82f6", fontSize: "11px", flexShrink: 0 }}>◆</span>
+                  <span style={{ ...previewName, color: "#cccccc" }}>{name}</span>
                   <span style={{ color: "#3b82f6", fontSize: "13px", fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
                     {targetLabel(target)}
                   </span>
                 </div>
               ))}
-              {parseResult.errors.map((err, i) => (
-                <div key={i} style={{
-                  display: "flex", gap: "8px", alignItems: "baseline",
-                  marginBottom: "4px", lineHeight: 1.4,
-                }}>
+
+              {parsed.errors.map((err, i) => (
+                <div key={i} style={previewRow}>
                   <span style={{ color: "#ef4444", fontSize: "11px", flexShrink: 0 }}>✗</span>
-                  <span style={{ color: "#555", fontSize: "12px", fontFamily: "'DM Mono', monospace" }}>
+                  <span style={{ color: "#888", fontSize: "12px", fontFamily: "'DM Mono', monospace" }}>
                     {err}
                   </span>
                 </div>
               ))}
+
+              {routineDiffs.length > 0 && (
+                <div style={{ color: "#888", fontSize: "11px", letterSpacing: "0.5px", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #1a1a1a", lineHeight: 1.6 }}>
+                  La rutina se aplica desde la próxima sesión de cada día. Las
+                  series ya registradas no se tocan.
+                </div>
+              )}
             </div>
           )}
 
@@ -360,7 +306,7 @@ export default function ObjetivosTab({
                 transition: "background 150ms ease-out, color 150ms ease-out",
               }}
             >
-              {hasItems ? `APLICAR (${parseResult.items.length})` : "APLICAR"}
+              {hasItems ? `APLICAR (${routineDiffs.length + targetEntries.length})` : "APLICAR"}
             </button>
           </div>
         </div>
