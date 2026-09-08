@@ -38,7 +38,9 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
       const src = lastSets[i] ?? lastSets[lastSets.length - 1];
       return { ...s, weight: src.weight || "", reps: src.reps || "" };
     });
-    onUpdate({ ...data, sets: filled });
+    // Marcado como autofill: es una escritura del sistema, no del usuario. Sin
+    // esto, abrir un día para mirarlo guardaba una sesión que nunca entrenaste.
+    onUpdate({ ...data, sets: filled }, { autofill: true });
   }, [lastData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rirAvg = (() => {
