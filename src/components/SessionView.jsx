@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { DAYS, getDateKey, getTodayDayKey, getNextDayKey, sortedExercises, Z } from "../lib/constants";
+import { DAYS, getDateKey, getTodayDayKey, getNextDayKey, sortedExercises, makeEmptySet, Z } from "../lib/constants";
 import { withDefaults, seedRoutine, sessionExercisesFromRoutine } from "../lib/routine";
 import { saveSession, getSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getRecentSessions, exerciseHistoryFrom, setUserProfile, getRoutine, saveRoutine } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
