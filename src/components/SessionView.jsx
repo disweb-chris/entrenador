@@ -84,6 +84,22 @@ export default function SessionView({ user, profile, onSignOut }) {
     };
   }, [flushSave]);
 
+  // La sesión también se escribe desde afuera (el MCP). Al volver a la app se
+  // relee: si no, la próxima edición guardaría el estado en memoria y pisaría
+  // esas series. Sólo sin ediciones pendientes, que son más nuevas que la DB.
+  useEffect(() => {
+    async function refresh() {
+      if (document.visibilityState !== "visible" || pendingRef.current || !activeDay) return;
+      const remote = await getSession(user.uid, activeDateKey, activeDay).catch(() => null);
+      if (!remote || pendingRef.current) return;
+      skipSaveRef.current = true;
+      setSession(remote);
+      setSessionNotes(remote.sessionNotes || "");
+    }
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, [user.uid, activeDay, activeDateKey]);
+
   useEffect(() => {
     if (!activeDay) { setLoading(false); return; }
     if (!routine) return; // sin rutina una sesión nueva saldría sin ejercicios

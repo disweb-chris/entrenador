@@ -1,4 +1,4 @@
-import { bestSet } from "./records";
+import { bestSet } from "./records.js";
 
 // Detección de estancamiento: la contraparte de la sugerencia de peso. La app
 // ya dice qué cargar hoy, pero no avisaba cuando un ejercicio lleva semanas sin

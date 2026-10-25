@@ -1,4 +1,4 @@
-import { DAYS, DEFAULT_EXERCISES, REST_DEFAULTS, makeEmptySet } from "./constants";
+import { DAYS, DEFAULT_EXERCISES, REST_DEFAULTS, makeEmptySet } from "./constants.js";
 
 // La rutina vivía hardcodeada en DEFAULT_EXERCISES: cambiar un ejercicio, el
 // orden o un descanso de forma permanente exigía tocar código y desplegar. Acá

@@ -1,4 +1,4 @@
-import { DAYS, REST_DEFAULTS } from "./constants";
+import { DAYS, REST_DEFAULTS } from "./constants.js";
 
 // Parsea lo que se pega en la pestaña de rutina. Tres formatos, en orden de
 // expresividad:
@@ -59,7 +59,7 @@ export function parseSpec(spec) {
   return null;
 }
 
-function normalizeTarget(val) {
+export function normalizeTarget(val) {
   if (!val || typeof val !== "object") return null;
   const series = num(val.series ?? val.sets);
   const peso = num(val.peso ?? val.weight ?? val.kg);
