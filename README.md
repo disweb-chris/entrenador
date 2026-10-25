@@ -35,6 +35,10 @@ npm run build
 firebase deploy
 ```
 
+## MCP
+
+`mcp/` es un servidor MCP para leer y registrar entrenamientos desde Claude con el mismo modelo de datos que la app. Ver [mcp/README.md](mcp/README.md).
+
 ## Índices requeridos en Firestore
 
 Ir a Firebase Console → Firestore → Indexes y crear:
@@ -65,8 +69,9 @@ Ir a Firebase Console → Firestore → Indexes y crear:
   uid, weekKey
   targets: { [ejercicio]: { series, reps, peso } }
 
-/restprefs/{uid}
-  prefs: { [ejercicio]: segundos }
+/routines/{uid}
+  uid, updatedAt
+  days: { [dayKey]: { foco, ejercicios: [{ nombre, tipo, descanso, notas }] } }
 ```
 
 ## Formato JSON para importar targets

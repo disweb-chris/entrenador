@@ -1,6 +1,6 @@
-import { DAYS, RIR_CONFIG, FATIGUE_CONFIG, sortedExercises } from "./constants";
-import { recordStatus, formatMark } from "./records";
-import { stagnationLabel } from "./stagnation";
+import { DAYS, RIR_CONFIG, FATIGUE_CONFIG, sortedExercises } from "./constants.js";
+import { recordStatus, formatMark } from "./records.js";
+import { stagnationLabel } from "./stagnation.js";
 
 // Momento en que se registró la primera serie del ejercicio. null en sesiones
 // anteriores a que se guardara doneAt.
