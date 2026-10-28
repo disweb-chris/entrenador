@@ -58,6 +58,8 @@ Ir a Firebase Console → Firestore → Indexes y crear:
   exercises: {
     [nombre]: {
       type: "compound" | "isolation",
+      load?: "lado" | "total",        // cómo se anota el peso
+      variantOf?: string,             // si es una alternativa: el ejercicio principal
       sets: [{ weight, reps, rir, fatigue, done, notes }],
       notes: string,
       restTime: number (segundos)
@@ -71,7 +73,32 @@ Ir a Firebase Console → Firestore → Indexes y crear:
 
 /routines/{uid}
   uid, updatedAt
-  days: { [dayKey]: { foco, ejercicios: [{ nombre, tipo, descanso, notas }] } }
+  days: { [dayKey]: { foco, ejercicios: [{
+    nombre, tipo, descanso, notas, carga?,
+    alternativas?: [{ nombre, tipo, descanso, notas, carga? }]
+  }] } }
+```
+
+### Alternativas
+
+Cada ejercicio de la rutina puede tener alternativas (otra máquina o variante).
+La sesión arranca con el principal; en la tarjeta se cambia a una alternativa
+con un toque y queda en el mismo lugar. Cada alternativa tiene nombre propio,
+así que su historial, récords y objetivos semanales no se mezclan con los del
+principal. Si ya había series hechas con la variante anterior, se conservan y
+la nueva entra al lado con las series que faltaban.
+
+`carga` (`"lado"` o `"total"`) se muestra junto al nombre: 20kg por lado y 40kg
+en total son la misma carga.
+
+```json
+{ "rutina": { "jueves": { "ejercicios": [
+  { "nombre": "Remo en T Apoyado", "tipo": "compound", "carga": "total",
+    "alternativas": [
+      { "nombre": "Remo con Mancuerna", "carga": "lado", "descanso": 90 },
+      "Remo en Polea Baja"
+    ] }
+] } } }
 ```
 
 ## Formato JSON para importar targets

@@ -1,11 +1,13 @@
-import { DAYS, REST_DEFAULTS } from "./constants.js";
+import { DAYS, REST_DEFAULTS, normalizeLoad } from "./constants.js";
 
 // Parsea lo que se pega en la pestaña de rutina. Tres formatos, en orden de
 // expresividad:
 //
 //   1. { "rutina": { "lunes": { "foco": ..., "ejercicios": [...] } } }
 //      Define la rutina completa de un día: orden (el del array), tipo,
-//      descanso y objetivo por ejercicio.
+//      descanso, carga ("lado" | "total"), objetivo y alternativas por
+//      ejercicio. Una alternativa admite los mismos campos (menos otras
+//      alternativas) y hereda tipo y descanso del principal.
 //   2. { "Press": { "series": 3, "reps": 8, "peso": 80 } }
 //      Sólo objetivos. El formato que ya existía.
 //   3. "Press: 3x8@80kg" línea por línea.
@@ -74,6 +76,22 @@ export function normalizeTarget(val) {
 
 // ── Formato de rutina ─────────────────────────────────────────────────────────
 
+function parseLoad(item, label, errors) {
+  const raw = item?.carga ?? item?.load ?? item?.peso_por;
+  if (raw == null || raw === "") return null;
+  const load = normalizeLoad(raw);
+  if (!load) errors.push(`${label}: carga "${raw}" no reconocida (usá "lado" o "total")`);
+  return load;
+}
+
+function addTarget(targets, nombre, item) {
+  const objetivo = item?.objetivo ?? item?.target;
+  const t = objetivo ? normalizeTarget(objetivo) : null;
+  if (t && (t.series != null || t.peso != null || t.reps != null || t.reps_por_serie)) {
+    targets[nombre] = t;
+  }
+}
+
 function parseRoutineObject(rutina, errors) {
   const routine = {};
   const targets = {};
@@ -93,6 +111,10 @@ function parseRoutineObject(rutina, errors) {
 
     const ejercicios = [];
     const seen = new Set();
+    // Una alternativa nunca le quita el nombre a un ejercicio principal del día,
+    // aunque aparezca antes en la lista.
+    const mainNames = new Set(list.map(raw =>
+      String((typeof raw === "string" ? raw : raw?.nombre ?? raw?.ejercicio ?? raw?.name) ?? "").trim()));
     list.forEach((raw, i) => {
       const item = typeof raw === "string" ? { nombre: raw } : raw;
       const nombre = String(item?.nombre ?? item?.ejercicio ?? item?.name ?? "").trim();
@@ -108,20 +130,51 @@ function parseRoutineObject(rutina, errors) {
 
       const tipo = item.tipo === "compound" || item.tipo === "isolation" ? item.tipo : "isolation";
       const descanso = num(item.descanso ?? item.rest ?? item.restTime);
-      ejercicios.push({
+      const ex = {
         nombre,
         tipo,
         descanso: descanso != null && descanso > 0 ? descanso : (REST_DEFAULTS[tipo] ?? 60),
         notas: String(item.notas ?? item.nota ?? "").trim(),
-      });
+      };
+      const carga = parseLoad(item, `"${nombre}"`, errors);
+      if (carga) ex.carga = carga;
 
       // El objetivo viaja junto al ejercicio pero se guarda aparte: la rutina es
       // permanente y los objetivos son de la semana.
-      const objetivo = item.objetivo ?? item.target;
-      const t = objetivo ? normalizeTarget(objetivo) : null;
-      if (t && (t.series != null || t.peso != null || t.reps != null || t.reps_por_serie)) {
-        targets[nombre] = t;
-      }
+      addTarget(targets, nombre, item);
+
+      const rawAlts = item.alternativas ?? item.alternatives ?? item.alternativa;
+      const alts = rawAlts == null ? [] : Array.isArray(rawAlts) ? rawAlts : [rawAlts];
+      const alternativas = [];
+      alts.forEach((rawAlt, j) => {
+        const alt = typeof rawAlt === "string" ? { nombre: rawAlt } : rawAlt;
+        const altName = String(alt?.nombre ?? alt?.ejercicio ?? alt?.name ?? "").trim();
+        if (!altName) {
+          errors.push(`"${nombre}" alternativa #${j + 1}: sin nombre`);
+          return;
+        }
+        // Cada variante es una clave de la sesión: dos iguales en un día se pisarían.
+        if (seen.has(altName) || mainNames.has(altName)) {
+          errors.push(`"${rawDay}": "${altName}" repetido`);
+          return;
+        }
+        seen.add(altName);
+        const altTipo = alt.tipo === "compound" || alt.tipo === "isolation" ? alt.tipo : tipo;
+        const altDescanso = num(alt.descanso ?? alt.rest ?? alt.restTime);
+        const a = {
+          nombre: altName,
+          tipo: altTipo,
+          descanso: altDescanso != null && altDescanso > 0 ? altDescanso : ex.descanso,
+          notas: String(alt.notas ?? alt.nota ?? "").trim(),
+        };
+        const altCarga = parseLoad(alt, `"${altName}"`, errors);
+        if (altCarga) a.carga = altCarga;
+        alternativas.push(a);
+        addTarget(targets, altName, alt);
+      });
+      if (alternativas.length) ex.alternativas = alternativas;
+
+      ejercicios.push(ex);
     });
 
     if (!ejercicios.length) {

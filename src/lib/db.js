@@ -33,11 +33,13 @@ export async function getSession(uid, dateKey, dayKey) {
   return snap.exists() ? snap.data() : null;
 }
 
+// Se escribe la sesión entera, sin merge: con merge Firestore combina los maps
+// anidados, y un ejercicio quitado de `exercises` (o cambiado por una
+// alternativa) seguía en el documento y volvía a aparecer al recargar.
 export async function saveSession(uid, dateKey, dayKey, data) {
   await setDoc(
     doc(db, "sessions", sessionId(uid, dateKey, dayKey)),
-    { uid, dateKey, dayKey, updatedAt: Date.now(), ...data },
-    { merge: true }
+    { ...data, uid, dateKey, dayKey, updatedAt: Date.now() }
   );
 }
 

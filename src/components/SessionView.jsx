@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { DAYS, getDateKey, getTodayDayKey, getNextDayKey, sortedExercises, makeEmptySet, Z } from "../lib/constants";
-import { withDefaults, seedRoutine, sessionExercisesFromRoutine } from "../lib/routine";
+import { withDefaults, seedRoutine, sessionExercisesFromRoutine, findRoutineEntry, switchVariant } from "../lib/routine";
 import { saveSession, getSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getRecentSessions, exerciseHistoryFrom, setUserProfile, getRoutine, saveRoutine } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
@@ -9,7 +9,7 @@ import ExerciseCard from "./ExerciseCard";
 import RestTimer from "./RestTimer";
 import ObjetivosTab from "./ObjetivosTab";
 import SessionPicker from "./SessionPicker";
-import { computeBests } from "../lib/records";
+import { computeBests, latestExerciseData } from "../lib/records";
 import { stagnationStatus } from "../lib/stagnation";
 
 export default function SessionView({ user, profile, onSignOut }) {
@@ -204,6 +204,26 @@ export default function SessionView({ user, profile, onSignOut }) {
       const { [name]: _, ...rest } = prev.exercises;
       return { ...prev, exercises: rest };
     });
+  }
+
+  // Lo último hecho con un ejercicio: la sesión anterior del mismo día y, si
+  // ahí no estaba (una alternativa que se usa de vez en cuando), la más
+  // reciente donde se hizo.
+  function lastDataFor(exName) {
+    return lastSession?.exercises?.[exName] ?? latestExerciseData(recent, exName, activeDateKey);
+  }
+
+  // Un toque en la tarjeta cambia a otra máquina o variante en el mismo lugar.
+  function switchExercise(fromName, variant, baseName) {
+    touchedRef.current = true;
+    setSession(prev => ({
+      ...prev,
+      exercises: switchVariant(prev.exercises, fromName, variant, {
+        baseName,
+        targets,
+        restTime: lastDataFor(variant.nombre)?.restTime,
+      }),
+    }));
   }
 
   function addExercise() {
@@ -566,13 +586,18 @@ export default function SessionView({ user, profile, onSignOut }) {
               }}
             />
 
-            {sortedExercises(session?.exercises, activeDay).map(([name, data]) => (
+            {sortedExercises(session?.exercises, activeDay).map(([name, data]) => {
+              const slot = findRoutineEntry(routine?.[activeDay], name, data.variantOf);
+              return (
               <ExerciseCard
                 key={name}
                 name={name}
                 type={data.type || "isolation"}
                 data={data}
-                lastData={lastSession?.exercises?.[name]}
+                load={data.load ?? slot?.variant?.carga}
+                variants={slot?.options}
+                onSwitchVariant={slot ? v => switchExercise(name, v, slot.entry.nombre) : undefined}
+                lastData={lastDataFor(name)}
                 target={targets?.[name]}
                 // Reenvía las opciones: descartarlas hacía pasar el
                 // autocompletado por una edición del usuario y se guardaba.
@@ -583,7 +608,8 @@ export default function SessionView({ user, profile, onSignOut }) {
                 best={bests[name]}
                 stagnation={stagnations[name]}
               />
-            ))}
+              );
+            })}
 
             {showAddExercise ? (
               <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "12px", padding: "16px", marginBottom: "10px" }}>

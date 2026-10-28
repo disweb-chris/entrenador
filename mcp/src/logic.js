@@ -4,8 +4,8 @@
 import {
   DAYS, REST_DEFAULTS, getDateKey, makeEmptySet, sortedExercises, getNextDayKey,
 } from "../../src/lib/constants.js";
-import { withDefaults, seedRoutine, sessionExercisesFromRoutine } from "../../src/lib/routine.js";
-import { computeBests, bestSet, recordStatus, roundKg } from "../../src/lib/records.js";
+import { withDefaults, seedRoutine, sessionExercisesFromRoutine, variantsOf, findRoutineEntry, switchVariant } from "../../src/lib/routine.js";
+import { computeBests, bestSet, recordStatus, roundKg, latestExerciseData } from "../../src/lib/records.js";
 import { stagnationStatus, stagnationLabel } from "../../src/lib/stagnation.js";
 import { suggestProgression } from "../../src/lib/progression.js";
 import { getWeekKey } from "../../src/lib/report.js";
@@ -136,6 +136,8 @@ export function formatExercise(name, data, { soloHechas = false } = {}) {
   const sets = (data?.sets || []).map(formatSet);
   return {
     nombre: name,
+    ...(data?.load ? { carga: data.load } : {}),
+    ...(data?.variantOf ? { alternativa_de: data.variantOf } : {}),
     tipo: data?.type || "isolation",
     orden: data?.order ?? null,
     descanso: data?.restTime ?? null,
@@ -262,7 +264,16 @@ function hasDoneSets(session) {
 
 const isBlank = s => !s.done && (s.weight === "" || s.weight == null) && (s.reps === "" || s.reps == null);
 
-/** Nombre del ejercicio en la sesión; si no existe, lo agrega al final. */
+/** Todos los nombres de la rutina de un día, principales y alternativas. */
+export function routineVariantNames(dayRoutine) {
+  return (dayRoutine?.ejercicios || []).flatMap(e => variantsOf(e).map(v => v.nombre));
+}
+
+/**
+ * Nombre del ejercicio en la sesión; si no existe, lo agrega. Si es una
+ * alternativa (o el principal) de un lugar de la rutina que ya ocupa otra
+ * variante, la cambia en ese lugar como el botón de la app; si no, va al final.
+ */
 export async function ensureExercise(store, session, ctx, query, { tipo, restTime } = {}) {
   const existing = matchName(Object.keys(session.exercises), query);
   if (existing) return { name: existing, added: false };
@@ -270,11 +281,30 @@ export async function ensureExercise(store, session, ctx, query, { tipo, restTim
   // Si está en la rutina con otro nombre, usar el de la rutina mantiene el historial unido.
   let routineDay = ctx.routineDay;
   if (!routineDay) routineDay = (await loadRoutine(store)).days[ctx.dayKey];
-  const routineNames = (routineDay?.ejercicios || []).map(e => e.nombre);
-  const name = matchName(routineNames, query) ?? String(query).trim();
-  const fromRoutine = (routineDay?.ejercicios || []).find(e => e.nombre === name);
+  const name = matchName(routineVariantNames(routineDay), query) ?? String(query).trim();
+  const slot = findRoutineEntry(routineDay, name);
+  const fromRoutine = slot?.variant ?? null;
 
   const last = ctx.lastSession ?? await store.getLastSession(ctx.dayKey, ctx.dateKey);
+  const lastRest = last?.exercises?.[name]?.restTime;
+
+  if (slot) {
+    // Quién ocupa hoy ese lugar; con varias (una con series hechas y otra
+    // después), la última.
+    const occupant = sortedExercises(session.exercises, ctx.dayKey)
+      .filter(([n, d]) => findRoutineEntry(routineDay, n, d?.variantOf)?.entry.nombre === slot.entry.nombre)
+      .pop()?.[0];
+    if (occupant) {
+      const { targets } = await targetsFor(store, ctx.dateKey);
+      const variant = { ...fromRoutine, ...(tipo ? { tipo } : {}) };
+      session.exercises = switchVariant(session.exercises, occupant, variant, {
+        baseName: slot.entry.nombre, targets, restTime: restTime ?? lastRest,
+      });
+      // Con series hechas la anterior se queda al lado; si no, se reemplaza.
+      return { name, added: true, [session.exercises[occupant] ? "alongside" : "replaced"]: occupant };
+    }
+  }
+
   const type = tipo || fromRoutine?.tipo || last?.exercises?.[name]?.type || "isolation";
   const orders = Object.values(session.exercises).map(e => e?.order ?? -1);
   session.exercises[name] = {
@@ -283,7 +313,9 @@ export async function ensureExercise(store, session, ctx, query, { tipo, restTim
     notes: fromRoutine?.notas || "",
     // Al final de la sesión, que es donde se está agregando.
     order: orders.length ? Math.max(...orders) + 1 : 0,
-    restTime: restTime ?? last?.exercises?.[name]?.restTime ?? fromRoutine?.descanso ?? REST_DEFAULTS[type] ?? null,
+    restTime: restTime ?? lastRest ?? fromRoutine?.descanso ?? REST_DEFAULTS[type] ?? null,
+    ...(fromRoutine?.carga ? { load: fromRoutine.carga } : {}),
+    ...(slot && name !== slot.entry.nombre ? { variantOf: slot.entry.nombre } : {}),
   };
   return { name, added: true };
 }
@@ -353,4 +385,4 @@ export function stagnationFor(name, sessions) {
   return st ? { sesiones_sin_superar: st.since, rir_promedio: st.avgRir, fecha_record: st.bestDate, accion: st.action, texto: stagnationLabel(st) } : null;
 }
 
-export { computeBests, roundKg, suggestProgression, normalizeTarget, parseRoutineText, sortedExercises, getNextDayKey, makeEmptySet };
+export { variantsOf, findRoutineEntry, latestExerciseData, computeBests, roundKg, suggestProgression, normalizeTarget, parseRoutineText, sortedExercises, getNextDayKey, makeEmptySet };

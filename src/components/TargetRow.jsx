@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 
-export default function TargetRow({ name, target, onChange, onRemove }) {
+// `label` es lo que se muestra (con la carga); `secondary` marca una
+// alternativa que hoy no está en la sesión.
+export default function TargetRow({ name, label, secondary, target, onChange, onRemove }) {
   const [editing, setEditing] = useState(null); // 'series' | 'reps' | 'peso'
   const [draft, setDraft] = useState("");
   const inputRef = useRef(null);
@@ -127,8 +129,9 @@ export default function TargetRow({ name, target, onChange, onRemove }) {
       minHeight: "54px",
     }}>
       <span style={{
-        color: "#aaaaaa",
+        color: secondary ? "#888" : "#aaaaaa",
         fontSize: "14px",
+        paddingLeft: secondary ? "12px" : 0,
         fontFamily: "'DM Mono', monospace",
         flex: 1,
         overflow: "hidden",
@@ -136,7 +139,7 @@ export default function TargetRow({ name, target, onChange, onRemove }) {
         whiteSpace: "nowrap",
         letterSpacing: "0.3px",
       }}>
-        {name}
+        {secondary && "↳ "}{label ?? name}
       </span>
 
       <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0 }}>

@@ -69,6 +69,25 @@ export const DEFAULT_EXERCISES = {
 
 export const REST_DEFAULTS = { compound: 90, isolation: 60 };
 
+// Cómo se anota el peso. En una máquina de palancas o con mancuernas el número
+// puede ser el de un lado o la suma de los dos, y sin decirlo 20kg hoy y 40kg
+// la semana que viene parecen una progresión que no ocurrió.
+export const LOAD_LABEL = { lado: "por lado", total: "total" };
+
+/** "por lado", "Lado", "cada lado", "side" → "lado"; "total", "ambos" → "total"; lo demás → null. */
+export function normalizeLoad(raw) {
+  const s = String(raw ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  if (!s) return null;
+  if (/lado|side|brazo|pierna|mano|c\/u|cada/.test(s)) return "lado";
+  if (/total|ambos|both|suma/.test(s)) return "total";
+  return null;
+}
+
+/** "Remo con mancuerna (por lado)". Sin carga definida, el nombre tal cual. */
+export function nameWithLoad(name, load) {
+  return LOAD_LABEL[load] ? `${name} (${LOAD_LABEL[load]})` : name;
+}
+
 // Escala de apilado semántica: el cronómetro de descanso siempre por encima de
 // la barra de estado, sin números sueltos tipo 999.
 export const Z = { statusBar: 10, restTimer: 20, picker: 30 };
