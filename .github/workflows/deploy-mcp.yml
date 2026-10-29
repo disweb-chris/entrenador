@@ -20,7 +20,7 @@ concurrency:
 
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'entrenador-b3153' }}
-  REGION: ${{ vars.GCP_REGION || 'southamerica-east1' }}
+  REGION: ${{ vars.GCP_REGION || 'us-central1' }}
   SERVICE: ${{ vars.MCP_SERVICE || 'entrenador-mcp' }}
   REPOSITORY: entrenador
 

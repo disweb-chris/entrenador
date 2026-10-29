@@ -88,7 +88,7 @@ desde Actions → *Deploy MCP to Cloud Run* → *Run workflow*. Necesita:
 |---|---|
 | Secret `GCP_SA_KEY` | JSON de una cuenta de servicio de GCP con los roles *Cloud Run Admin*, *Artifact Registry Administrator* y *Service Account User* |
 | Secrets `MCP_TOKEN` y `ENTRENADOR_UID` | Opcionales. Sólo hacen falta para crear el servicio la primera vez o para cambiarlos; si no están, el servicio conserva los que tiene |
-| Variables `GCP_PROJECT_ID`, `GCP_REGION`, `MCP_SERVICE` | Opcionales. Default: `entrenador-b3153`, `southamerica-east1`, `entrenador-mcp` |
+| Variables `GCP_PROJECT_ID`, `GCP_REGION`, `MCP_SERVICE` | Opcionales. Default: `entrenador-b3153`, `us-central1`, `entrenador-mcp` |
 
 En el proyecto tienen que estar habilitadas las APIs de Cloud Run y Artifact
 Registry.
@@ -96,7 +96,7 @@ Registry.
 #### A mano
 
 ```bash
-REGION=southamerica-east1 PROJECT=entrenador-b3153
+REGION=us-central1 PROJECT=entrenador-b3153
 IMAGE=$REGION-docker.pkg.dev/$PROJECT/entrenador/entrenador-mcp:manual
 gcloud auth configure-docker $REGION-docker.pkg.dev
 docker build -f mcp/Dockerfile -t $IMAGE . && docker push $IMAGE
