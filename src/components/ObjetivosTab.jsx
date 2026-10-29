@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import TargetRow from "./TargetRow";
-import { sortedExercises, DAYS } from "../lib/constants";
+import { sortedExercises, DAYS, nameWithLoad } from "../lib/constants";
 import { parseRoutineText } from "../lib/routineParser";
-import { diffRoutineDay } from "../lib/routine";
+import { diffRoutineDay, findRoutineEntry } from "../lib/routine";
 
 function targetLabel(t) {
   if (!t) return "—";
@@ -119,7 +119,19 @@ export default function ObjetivosTab({
 
   // Mismo orden que la pantalla de sesión: Firestore devolvería las claves
   // del map alfabetizadas y los objetivos quedarían desalineados con la rutina.
-  const exerciseNames = sortedExercises(session.exercises, activeDay).map(([name]) => name);
+  // Cada alternativa tiene sus propios objetivos: van debajo del ejercicio que
+  // está en la sesión, aunque hoy no se use.
+  const rows = [];
+  const listed = new Set();
+  for (const [name, data] of sortedExercises(session.exercises, activeDay)) {
+    const slot = findRoutineEntry(routine?.[activeDay], name, data.variantOf);
+    const others = (slot?.options || []).filter(v => v.nombre !== name);
+    for (const v of [{ nombre: name, carga: data.load ?? slot?.variant?.carga }, ...others]) {
+      if (listed.has(v.nombre)) continue;
+      listed.add(v.nombre);
+      rows.push({ name: v.nombre, label: nameWithLoad(v.nombre, v.carga), secondary: v.nombre !== name });
+    }
+  }
 
   // ── Segmented control ─────────────────────────────────────────────────────────
 
@@ -163,10 +175,12 @@ export default function ObjetivosTab({
       {/* Edit mode */}
       {mode === "edit" && (
         <div>
-          {exerciseNames.map(exName => (
+          {rows.map(({ name: exName, label, secondary }) => (
             <TargetRow
               key={exName}
               name={exName}
+              label={label}
+              secondary={secondary}
               target={targets?.[exName] ?? null}
               onChange={(updated) => onTargetChange(exName, updated)}
               onRemove={() => onTargetRemove(exName)}
@@ -240,6 +254,11 @@ export default function ObjetivosTab({
                       · cambia el orden
                     </div>
                   )}
+                  {diff.alternativesChanged.map(a => (
+                    <div key={a.nombre} style={{ ...previewRow, paddingLeft: "19px", color: "#888", fontSize: "12px" }}>
+                      · alternativas de {a.nombre}: {a.alternativas.length ? a.alternativas.join(", ") : "ninguna"}
+                    </div>
+                  ))}
                   {diff.restChanged.length > 0 && (
                     <div style={{ ...previewRow, paddingLeft: "19px", color: "#888", fontSize: "12px" }}>
                       · descanso: {diff.restChanged.map(r => `${r.nombre} ${r.de}→${r.a}s`).join(", ")}

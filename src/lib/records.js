@@ -75,3 +75,19 @@ export function formatMark(mark) {
   if (!mark) return null;
   return `${roundKg(mark.weight)}kg × ${mark.reps} · 1RM ${roundKg(mark.e1rm)}kg`;
 }
+
+/**
+ * Los datos del ejercicio en la sesión más reciente (anterior a `beforeDate`)
+ * donde se hizo alguna serie. La sesión anterior del mismo día no alcanza para
+ * una alternativa: se usa cuando la máquina está ocupada, no cada semana.
+ */
+export function latestExerciseData(sessions, name, beforeDate = null) {
+  let found = null;
+  for (const s of sessions || []) {
+    if (!s?.dateKey || (beforeDate && s.dateKey >= beforeDate)) continue;
+    const data = s.exercises?.[name];
+    if (!(data?.sets || []).some(x => x.done)) continue;
+    if (!found || s.dateKey > found.dateKey) found = { dateKey: s.dateKey, data };
+  }
+  return found?.data ?? null;
+}

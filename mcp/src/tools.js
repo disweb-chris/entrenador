@@ -6,7 +6,7 @@ import {
   formatSession, formatExercise, loadRoutine, targetsFor, withSession, ensureExercise, addDoneSet, setAt,
   weightToStore, repsToStore, allExerciseNames, recordFor, stagnationFor, toNum,
   computeBests, roundKg, suggestProgression, normalizeTarget, parseRoutineText, sortedExercises,
-  getNextDayKey, makeEmptySet,
+  getNextDayKey, makeEmptySet, variantsOf, findRoutineEntry, latestExerciseData, routineVariantNames,
 } from "./logic.js";
 
 // ── Esquemas compartidos ─────────────────────────────────────────────────────
@@ -23,6 +23,7 @@ const rir = z.number().int().min(0).max(4).describe("Reps en reserva: 0=fallo, 1
 const fatiga = z.number().int().min(1).max(5).describe("Fatiga: 1=fresco, 2=leve, 3=moderada, 4=alta, 5=al límite");
 const tipo = z.enum(["compound", "isolation"]);
 const serie = z.number().int().min(1).describe("Número de serie, empezando en 1");
+const carga = z.enum(["lado", "total"]).describe("Cómo se anota el peso: 'lado' = el de un lado (mancuernas, palancas independientes), 'total' = la suma de los dos. La app lo muestra junto al nombre");
 
 const READ = { readOnlyHint: true, openWorldHint: false };
 const WRITE = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -66,6 +67,7 @@ export function buildServer(store) {
         "Cada sesión es una fecha + un día de rutina. Los pesos son kg. RIR 0-4 (0=fallo, 1=objetivo). Fatiga 1-5.",
         "Para registrar lo que el usuario está haciendo en el gimnasio usá registrar_set: completa la siguiente serie pendiente del ejercicio, como tocar el check en la app.",
         "Los nombres de ejercicio no son siempre iguales entre sesiones (ej. 'Facepull' y 'Face Pull'): usá rutina o sesion_por_fecha para ver los nombres vigentes antes de escribir.",
+        "Cada ejercicio de la rutina puede tener alternativas (otra máquina o variante para el mismo lugar). Cada alternativa es un ejercicio con nombre propio: su historial, récords y objetivos son suyos y no se mezclan con los del principal. 'carga' dice si el peso es por lado o total. Registrar una serie con el nombre de una alternativa la cambia en ese lugar de la sesión, como el botón de la app.",
       ].join("\n"),
     }
   );
@@ -181,7 +183,7 @@ export function buildServer(store) {
 
   tool(server, "rutina", {
     title: "Rutina",
-    description: "La rutina del usuario por día: foco y ejercicios en orden con tipo, descanso (s) y notas. Es la plantilla con la que la app arma cada sesión nueva.",
+    description: "La rutina del usuario por día: foco y ejercicios en orden con tipo, descanso (s), notas, carga ('lado' o 'total', si está definida) y alternativas (otras máquinas o variantes para ese lugar, cada una con nombre, tipo, descanso, notas y carga propios). Es la plantilla con la que la app arma cada sesión nueva: entra el principal y en la sesión se cambia a una alternativa con un toque.",
     inputSchema: { dia: z.string().optional().describe("Un solo día; default: todos") },
     annotations: READ,
   }, async ({ dia: d }) => {
@@ -204,7 +206,7 @@ export function buildServer(store) {
     const { days } = await loadRoutine(store, recent);
     const out = {};
     for (const [dayKey, day] of Object.entries(days)) {
-      for (const ex of day.ejercicios || []) {
+      for (const ex of (day.ejercicios || []).flatMap(variantsOf)) {
         out[ex.nombre] ||= { dias: [], rutina: ex.descanso ?? null, ultimo_usado: null };
         out[ex.nombre].dias.push(dayKey);
       }
@@ -265,19 +267,34 @@ export function buildServer(store) {
       sesion_anterior: last?.dateKey ?? null,
       ya_empezada: !!current,
       objetivos_semana: tg.semana + (tg.heredados ? " (heredados de la semana anterior)" : ""),
-      ejercicios: (routineDay?.ejercicios || []).map(ex => {
-        const prev = last?.exercises?.[ex.nombre];
-        const prevDone = (prev?.sets || []).filter(s => s.done).map(s => ({ peso: toNum(s.weight), reps: toNum(s.reps), rir: s.rir ?? null }));
-        const sug = suggestProgression(prev, ex.tipo);
+      ejercicios: (routineDay?.ejercicios || []).map(entry => {
+        const [main, ...alts] = variantsOf(entry);
+        // El principal se compara con la sesión anterior de ese día, como la
+        // app; una alternativa, con la última vez que se usó.
+        const detail = (ex, prev) => {
+          const prevDone = (prev?.sets || []).filter(s => s.done).map(s => ({ peso: toNum(s.weight), reps: toNum(s.reps), rir: s.rir ?? null }));
+          const sug = suggestProgression(prev, ex.tipo);
+          return {
+            nombre: ex.nombre,
+            ...(ex.carga ? { carga: ex.carga } : {}),
+            tipo: ex.tipo,
+            descanso: prev?.restTime ?? ex.descanso,
+            notas: ex.notas || undefined,
+            ultima_vez: prevDone.length ? prevDone : null,
+            objetivo: tg.targets?.[ex.nombre] ?? null,
+            sugerencia: sug ? { peso: sug.weight, reps: sug.reps, accion: sug.action, motivo: sug.reason } : null,
+            estancamiento: stagnationFor(ex.nombre, recent),
+          };
+        };
+        const lastOf = name => last?.exercises?.[name] ?? latestExerciseData(recent, name, dateKey);
+        // Qué variante quedó en la sesión de hoy si ya se empezó y se cambió.
+        const inUse = current && Object.entries(current.exercises || {})
+          .filter(([n, d]) => findRoutineEntry(routineDay, n, d?.variantOf)?.entry.nombre === entry.nombre)
+          .map(([n]) => n);
         return {
-          nombre: ex.nombre,
-          tipo: ex.tipo,
-          descanso: prev?.restTime ?? ex.descanso,
-          notas: ex.notas || undefined,
-          ultima_vez: prevDone.length ? prevDone : null,
-          objetivo: tg.targets?.[ex.nombre] ?? null,
-          sugerencia: sug ? { peso: sug.weight, reps: sug.reps, accion: sug.action, motivo: sug.reason } : null,
-          estancamiento: stagnationFor(ex.nombre, recent),
+          ...detail(main, lastOf(main.nombre)),
+          ...(inUse?.length && !(inUse.length === 1 && inUse[0] === main.nombre) ? { en_sesion: inUse } : {}),
+          ...(alts.length ? { alternativas: alts.map(a => detail(a, lastOf(a.nombre))) } : {}),
         };
       }),
     };
@@ -287,7 +304,7 @@ export function buildServer(store) {
 
   tool(server, "registrar_set", {
     title: "Registrar serie",
-    description: "Registra una serie hecha (como tocar el check en la app): completa la primera serie pendiente del ejercicio o agrega una nueva. Si la sesión no existe la crea desde la rutina del día, y si el ejercicio no está en la sesión lo agrega al final. Avanza la rotación si es hoy. Devuelve cómo quedó el ejercicio y si es récord.",
+    description: "Registra una serie hecha (como tocar el check en la app): completa la primera serie pendiente del ejercicio o agrega una nueva. Si la sesión no existe la crea desde la rutina del día. Si el ejercicio no está en la sesión: si es una alternativa (o el principal) de un lugar de la rutina, la cambia en ese lugar; si no, lo agrega al final. Avanza la rotación si es hoy. Devuelve cómo quedó el ejercicio y si es récord.",
     inputSchema: {
       ejercicio, peso, reps,
       rir: rir.optional(),
@@ -299,9 +316,9 @@ export function buildServer(store) {
     },
     annotations: WRITE,
   }, async args => {
-    let name, added, idx;
+    let name, added, replaced, alongside, idx;
     const out = await withSession(store, args, async (session, ctx) => {
-      ({ name, added } = await ensureExercise(store, session, ctx, args.ejercicio, { tipo: args.tipo, restTime: args.restTime }));
+      ({ name, added, replaced, alongside } = await ensureExercise(store, session, ctx, args.ejercicio, { tipo: args.tipo, restTime: args.restTime }));
       const ex = session.exercises[name];
       if (args.restTime != null) ex.restTime = args.restTime;
       idx = addDoneSet(ex, { peso: args.peso, reps: args.reps, rir: args.rir, fatiga: args.fatiga, notas: args.notas });
@@ -311,6 +328,9 @@ export function buildServer(store) {
       serie_registrada: idx + 1,
       sesion_creada: out.created || undefined,
       ejercicio_agregado: added || undefined,
+      // Cambio de alternativa: a cuál reemplazó, o al lado de cuál quedó (si ya tenía series hechas).
+      reemplaza_a: replaced,
+      junto_a: alongside,
       record: recordFor(recent, name, out.dateKey, out.session.exercises[name].sets),
     });
   });
@@ -449,7 +469,7 @@ export function buildServer(store) {
 
   tool(server, "guardar_objetivos", {
     title: "Guardar objetivos",
-    description: "Guarda objetivos (series, reps o reps_por_serie, peso) por ejercicio para una semana. Por defecto se combinan con los existentes; con reemplazar=true la semana queda sólo con éstos. Usá el nombre del ejercicio tal como está en la rutina.",
+    description: "Guarda objetivos (series, reps o reps_por_serie, peso) por ejercicio para una semana. Por defecto se combinan con los existentes; con reemplazar=true la semana queda sólo con éstos. Usá el nombre del ejercicio tal como está en la rutina; una alternativa lleva sus propios objetivos con su nombre.",
     inputSchema: {
       objetivos: z.record(z.string(), objetivo).describe("{ \"Press Plano Máquina\": { \"series\": 3, \"reps\": 12, \"peso\": 35 } }"),
       semana: z.string().optional().describe("ISO, ej '2026-W44'. Default: semana actual"),
@@ -460,7 +480,8 @@ export function buildServer(store) {
   }, async ({ objetivos, semana, reemplazar = false, eliminar = [] }) => {
     const week = checkWeek(semana);
     const { days } = await loadRoutine(store);
-    const routineNames = Object.values(days).flatMap(d => (d.ejercicios || []).map(e => e.nombre));
+    // Incluye las alternativas: cada una tiene sus propios objetivos.
+    const routineNames = Object.values(days).flatMap(routineVariantNames);
     const targets = {};
     const renombrados = {};
     for (const [raw, val] of Object.entries(objetivos)) {
@@ -482,7 +503,7 @@ export function buildServer(store) {
 
   tool(server, "guardar_rutina_dia", {
     title: "Guardar rutina de un día",
-    description: "Reemplaza la rutina de un día: la lista de ejercicios en orden (el orden del array ES el de la rutina) con tipo, descanso y notas. Afecta a las sesiones nuevas, no a las ya creadas. Cada ejercicio puede traer un objetivo, que se guarda en la semana actual.",
+    description: "Reemplaza la rutina de un día: la lista de ejercicios en orden (el orden del array ES el de la rutina) con tipo, descanso, notas, carga y alternativas. Afecta a las sesiones nuevas, no a las ya creadas. Las alternativas también se reemplazan: para conservar las que había, volvé a mandarlas (leelas antes con rutina). Cada ejercicio o alternativa puede traer un objetivo, que se guarda en la semana actual con su nombre.",
     inputSchema: {
       dia: z.string().describe(`Día: ${DAY_LIST}`),
       foco: z.string().optional(),
@@ -491,7 +512,16 @@ export function buildServer(store) {
         tipo: tipo.optional(),
         descanso: z.number().int().min(5).max(900).optional().describe("Segundos"),
         notas: z.string().optional(),
+        carga: carga.optional(),
         objetivo: objetivo.optional(),
+        alternativas: z.array(z.object({
+          nombre: z.string().min(1).describe("Nombre propio, distinto de todos los ejercicios y alternativas del día"),
+          tipo: tipo.optional().describe("Default: el del principal"),
+          descanso: z.number().int().min(5).max(900).optional().describe("Segundos. Default: el del principal"),
+          notas: z.string().optional(),
+          carga: carga.optional(),
+          objetivo: objetivo.optional(),
+        })).optional().describe("Otras máquinas o variantes para este lugar de la rutina"),
       })).min(1),
     },
     annotations: DESTRUCTIVE,
@@ -505,18 +535,22 @@ export function buildServer(store) {
 
     const { days } = await loadRoutine(store);
     const before = (days[dayKey]?.ejercicios || []).map(e => e.nombre);
+    const altsBefore = routineVariantNames(days[dayKey]).filter(n => !before.includes(n));
     const next = { ...days, [dayKey]: { foco: routine[dayKey].foco ?? days[dayKey]?.foco, ejercicios: routine[dayKey].ejercicios } };
     await store.saveRoutine(next);
     const week = weekKeyOf(today());
     if (Object.keys(targets).length) await store.saveTargets(week, targets);
 
     const after = next[dayKey].ejercicios.map(e => e.nombre);
+    const altsAfter = routineVariantNames(next[dayKey]).filter(n => !after.includes(n));
     return {
       ok: true,
       dia: dayKey,
       avisos: errors,
       agregados: after.filter(n => !before.includes(n)),
       quitados: before.filter(n => !after.includes(n)),
+      alternativas_agregadas: altsAfter.filter(n => !altsBefore.includes(n)),
+      alternativas_quitadas: altsBefore.filter(n => !altsAfter.includes(n)),
       rutina: next[dayKey],
       objetivos_guardados: Object.keys(targets).length ? { semana: week, ejercicios: Object.keys(targets) } : undefined,
     };

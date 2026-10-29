@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { RIR_CONFIG, FATIGUE_CONFIG, REST_DEFAULTS, makeEmptySet } from "../lib/constants";
+import { RIR_CONFIG, FATIGUE_CONFIG, REST_DEFAULTS, LOAD_LABEL, makeEmptySet } from "../lib/constants";
 import { suggestProgression, SUGGESTION_COLOR } from "../lib/progression";
 import ProgressionChart from "./ProgressionChart";
 import { recordStatus, formatMark, roundKg } from "../lib/records";
 import { stagnationLabel } from "../lib/stagnation";
 
-export default function ExerciseCard({ name, type, data, lastData, target, onUpdate, onDelete, onStartRest, loadHistory, best, stagnation }) {
+export default function ExerciseCard({ name, type, data, load, variants, onSwitchVariant, lastData, target, onUpdate, onDelete, onStartRest, loadHistory, best, stagnation }) {
   const [showNotes, setShowNotes] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [history, setHistory] = useState(null);
@@ -124,7 +124,16 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "16px", fontWeight: "500", letterSpacing: "0.5px", marginBottom: "4px" }}>{name}</div>
+          <div style={{ fontSize: "16px", fontWeight: "500", letterSpacing: "0.5px", marginBottom: "4px" }}>
+            {name}
+            {/* Parte del nombre: sin esto 20kg por lado y 40kg en total se leen
+                como cargas distintas. */}
+            {LOAD_LABEL[load] && (
+              <span style={{ color: "#888", fontWeight: 400, fontSize: "13px", letterSpacing: "1px", whiteSpace: "nowrap" }}>
+                {" "}· {LOAD_LABEL[load].toUpperCase()}
+              </span>
+            )}
+          </div>
           {/* Los separadores "·" iban dentro de cada span y quedaban huérfanos al
               principio de la línea cuando el nombre del ejercicio forzaba el wrap. */}
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
@@ -169,6 +178,34 @@ export default function ExerciseCard({ name, type, data, lastData, target, onUpd
           )}
         </div>
       </div>
+
+      {/* Alternativas: la máquina está ocupada → un toque y se cambia en el
+          mismo lugar de la rutina. Cada una tiene su propio historial, así
+          que la referencia, la sugerencia y el récord de abajo cambian con ella. */}
+      {variants?.length > 1 && onSwitchVariant && (
+        <div role="group" aria-label={`Alternativas de ${name}`}
+          style={{ display: "flex", gap: "6px", overflowX: "auto", marginBottom: "10px", paddingBottom: "2px" }}>
+          {variants.map(v => {
+            const active = v.nombre === name;
+            return (
+              <button key={v.nombre}
+                onClick={() => !active && onSwitchVariant(v)}
+                aria-pressed={active}
+                style={{
+                  flexShrink: 0, minHeight: "44px", padding: "0 12px", borderRadius: "6px",
+                  border: `1px solid ${active ? "#f0f0f0" : "#333"}`,
+                  background: active ? "#f0f0f0" : "transparent",
+                  color: active ? "#0a0a0a" : "#ccc",
+                  fontFamily: "'DM Mono'", fontSize: "12px", letterSpacing: "0.5px",
+                  cursor: active ? "default" : "pointer", whiteSpace: "nowrap",
+                }}>
+                {v.nombre}
+                {LOAD_LABEL[v.carga] && <span style={{ opacity: 0.7 }}> · {LOAD_LABEL[v.carga]}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Last session + progression suggestion */}
       {lastSets.length > 0 && (

@@ -161,3 +161,90 @@ test("tiempos_descanso sale de la rutina y de la última sesión", async () => {
   assert.equal(r["Remo en T Apoyado"].rutina, 120);
   assert.equal(r["Remo en T Apoyado"].ultimo_usado, 90);
 });
+
+// ── Alternativas ─────────────────────────────────────────────────────────────
+
+async function withAlternatives() {
+  return call("guardar_rutina_dia", { dia: "jueves", ejercicios: [
+    { nombre: "Jalón Cerrado con V", tipo: "compound", descanso: 130 },
+    { nombre: "Remo en T Apoyado", tipo: "compound", descanso: 120, carga: "total", alternativas: [
+      { nombre: "Remo con Mancuerna", carga: "lado", descanso: 90, objetivo: { series: 4, reps: 10, peso: 30 } },
+      { nombre: "Remo en Polea Baja" },
+    ] },
+  ] });
+}
+
+test("guardar_rutina_dia guarda alternativas con carga y hereda tipo y descanso", async () => {
+  const r = await withAlternatives();
+  assert.deepEqual(r.alternativas_agregadas, ["Remo con Mancuerna", "Remo en Polea Baja"]);
+  const remo = db._data.get(`routines/${UID}`).days.jueves.ejercicios[1];
+  assert.equal(remo.carga, "total");
+  assert.deepEqual(remo.alternativas, [
+    { nombre: "Remo con Mancuerna", tipo: "compound", descanso: 90, notas: "", carga: "lado" },
+    { nombre: "Remo en Polea Baja", tipo: "compound", descanso: 120, notas: "" },
+  ]);
+  // El objetivo de la alternativa es suyo, con su nombre.
+  const t = db._data.get(`targets/${UID}_${weekKeyOf(today())}`).targets;
+  assert.equal(t["Remo con Mancuerna"].series, 4);
+  assert.equal(t["Remo en T Apoyado"], undefined);
+
+  const rut = await call("rutina", { dia: "jueves" });
+  assert.equal(rut.dias.jueves.ejercicios[1].alternativas.length, 2);
+});
+
+test("guardar_rutina_dia rechaza una alternativa con el nombre de otro ejercicio del día", async () => {
+  const r = await call("guardar_rutina_dia", { dia: "jueves", ejercicios: [
+    { nombre: "Jalón Cerrado con V", alternativas: [{ nombre: "Remo en T Apoyado" }] },
+    { nombre: "Remo en T Apoyado" },
+  ] });
+  assert.match(r.avisos.join(" "), /repetido/);
+  const jalon = db._data.get(`routines/${UID}`).days.jueves.ejercicios[0];
+  assert.equal(jalon.alternativas, undefined);
+});
+
+test("registrar_set con una alternativa la cambia en el lugar del principal", async () => {
+  await withAlternatives();
+  const r = await call("registrar_set", { ejercicio: "remo con mancuerna", peso: 30, reps: 10, rir: 1 });
+  assert.equal(r.reemplaza_a, "Remo en T Apoyado");
+  assert.equal(r.ejercicio.carga, "lado");
+  assert.equal(r.ejercicio.alternativa_de, "Remo en T Apoyado");
+  const ex = doc(`${UID}_${today()}_jueves`).exercises;
+  assert.equal(ex["Remo en T Apoyado"], undefined);
+  assert.equal(ex["Remo con Mancuerna"].order, 1);
+  assert.equal(ex["Remo con Mancuerna"].sets.length, 4); // series del objetivo de la alternativa
+  assert.equal(ex["Remo con Mancuerna"].restTime, 90);
+  // Sin historial propio no es récord: no hereda el del principal.
+  assert.equal(r.record.record_anterior, null);
+});
+
+test("cambiar de alternativa con series hechas conserva las hechas al lado", async () => {
+  await withAlternatives();
+  await call("registrar_set", { ejercicio: "Remo en T Apoyado", peso: 20, reps: 14 });
+  const r = await call("registrar_set", { ejercicio: "Remo en Polea Baja", peso: 50, reps: 12 });
+  assert.equal(r.junto_a, "Remo en T Apoyado");
+  const s = await call("sesion_por_fecha", {});
+  const names = s.sesiones[0].ejercicios.map(e => e.nombre);
+  assert.deepEqual(names, ["Jalón Cerrado con V", "Remo en T Apoyado", "Remo en Polea Baja"]);
+  const remoT = s.sesiones[0].ejercicios[1];
+  assert.equal(remoT.series_totales, 1); // las pendientes pasaron a la alternativa
+});
+
+test("proxima_sesion muestra las alternativas con su propio historial y objetivo", async () => {
+  await withAlternatives();
+  db._data.get(`sessions/${UID}_2026-10-15_jueves`).exercises["Remo con Mancuerna"] = {
+    type: "compound", order: 2, restTime: 75, load: "lado", variantOf: "Remo en T Apoyado", sets: [set(28, 10, { rir: 3 })],
+  };
+  const r = await call("proxima_sesion");
+  const remo = r.ejercicios.find(e => e.nombre === "Remo en T Apoyado");
+  assert.equal(remo.carga, "total");
+  const [manc, polea] = remo.alternativas;
+  assert.equal(manc.nombre, "Remo con Mancuerna");
+  assert.equal(manc.carga, "lado");
+  assert.deepEqual(manc.ultima_vez, [{ peso: 28, reps: 10, rir: 3 }]); // de otra semana, no de la anterior
+  assert.equal(manc.descanso, 75);
+  assert.equal(manc.objetivo.peso, 30);
+  assert.equal(manc.sugerencia.accion, "up");
+  assert.equal(polea.ultima_vez, null);
+  // El principal sigue con lo suyo.
+  assert.equal(remo.ultima_vez[0].peso, 20);
+});

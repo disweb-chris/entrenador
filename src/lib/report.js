@@ -1,4 +1,4 @@
-import { DAYS, RIR_CONFIG, FATIGUE_CONFIG, sortedExercises } from "./constants.js";
+import { DAYS, RIR_CONFIG, FATIGUE_CONFIG, sortedExercises, nameWithLoad } from "./constants.js";
 import { recordStatus, formatMark } from "./records.js";
 import { stagnationLabel } from "./stagnation.js";
 
@@ -73,7 +73,7 @@ export function generateReport({ session, lastSession, dayKey, dateKey, sessionD
     if (!done.length) return;
 
     lines.push(``);
-    lines.push(`▸ ${exName}`);
+    lines.push(`▸ ${nameWithLoad(exName, exData.load)}${exData.variantOf ? ` — alternativa de ${exData.variantOf}` : ""}`);
 
     // Compare with last session
     const lastEx = lastSession?.exercises?.[exName];
