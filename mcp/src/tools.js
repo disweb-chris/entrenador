@@ -31,8 +31,13 @@ const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, openWorldHint:
 
 const json = data => ({ content: [{ type: "text", text: JSON.stringify(data, null, 2) }] });
 
+// Los objetos se validan en modo estricto: un campo desconocido es un error y
+// no se descarta en silencio. Con un servidor desactualizado, Claude mandaba
+// `alternativas`, el servidor las tiraba, respondía ok y se perdían.
+const strict = shape => z.object(shape).strict();
+
 function tool(server, name, config, handler) {
-  server.registerTool(name, config, async args => {
+  server.registerTool(name, { ...config, inputSchema: strict(config.inputSchema ?? {}) }, async args => {
     try {
       return json(await handler(args ?? {}));
     } catch (err) {
@@ -460,7 +465,7 @@ export function buildServer(store) {
 
   // ── Escritura: objetivos y rutina ──────────────────────────────────────────
 
-  const objetivo = z.object({
+  const objetivo = strict({
     series: z.number().int().min(1).max(10).nullable().optional(),
     reps: z.number().int().min(0).nullable().optional(),
     reps_por_serie: z.array(z.number().int().min(0)).optional().describe("Reps distintas por serie, ej: [12, 10, 8]"),
@@ -507,14 +512,14 @@ export function buildServer(store) {
     inputSchema: {
       dia: z.string().describe(`Día: ${DAY_LIST}`),
       foco: z.string().optional(),
-      ejercicios: z.array(z.object({
+      ejercicios: z.array(strict({
         nombre: z.string().min(1),
         tipo: tipo.optional(),
         descanso: z.number().int().min(5).max(900).optional().describe("Segundos"),
         notas: z.string().optional(),
         carga: carga.optional(),
         objetivo: objetivo.optional(),
-        alternativas: z.array(z.object({
+        alternativas: z.array(strict({
           nombre: z.string().min(1).describe("Nombre propio, distinto de todos los ejercicios y alternativas del día"),
           tipo: tipo.optional().describe("Default: el del principal"),
           descanso: z.number().int().min(5).max(900).optional().describe("Segundos. Default: el del principal"),

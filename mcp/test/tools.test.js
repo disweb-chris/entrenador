@@ -248,3 +248,16 @@ test("proxima_sesion muestra las alternativas con su propio historial y objetivo
   // El principal sigue con lo suyo.
   assert.equal(remo.ultima_vez[0].peso, 20);
 });
+
+test("un campo desconocido es un error y no se descarta en silencio", async () => {
+  const before = structuredClone(db._data.get(`routines/${UID}`));
+  const r = await client.callTool({ name: "guardar_rutina_dia", arguments: { dia: "jueves", ejercicios: [
+    { nombre: "Remo en T Apoyado", variantes: ["Remo con Mancuerna"] },
+  ] } });
+  assert.equal(r.isError, true);
+  assert.match(r.content[0].text, /variantes/);
+  assert.deepEqual(db._data.get(`routines/${UID}`), before);
+
+  const top = await client.callTool({ name: "rutina", arguments: { dia: "jueves", extra: 1 } });
+  assert.equal(top.isError, true);
+});
