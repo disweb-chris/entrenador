@@ -1,0 +1,87 @@
+name: Deploy MCP to Cloud Run
+
+# El servidor MCP usa src/lib, así que se redespliega cuando cambia cualquiera
+# de los dos. Antes sólo se desplegaba la web y el MCP quedaba desactualizado
+# sin que nada lo avisara. También se puede correr a mano desde Actions.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "mcp/**"
+      - "src/lib/**"
+      - "package.json"
+      - ".github/workflows/deploy-mcp.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-mcp
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'entrenador-b3153' }}
+  REGION: ${{ vars.GCP_REGION || 'southamerica-east1' }}
+  SERVICE: ${{ vars.MCP_SERVICE || 'entrenador-mcp' }}
+  REPOSITORY: entrenador
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+      - run: npm ci
+        working-directory: mcp
+      - run: npm test
+        working-directory: mcp
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Repositorio de imágenes
+        run: |
+          gcloud artifacts repositories describe "$REPOSITORY" \
+            --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1 \
+          || gcloud artifacts repositories create "$REPOSITORY" \
+            --repository-format docker --location "$REGION" --project "$PROJECT_ID"
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+      # Se construye desde la raíz porque el MCP reutiliza src/lib.
+      - name: Build y push
+        run: |
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE:$GITHUB_SHA"
+          docker build -f mcp/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # Las variables de entorno del servicio se conservan entre despliegues.
+      # Sólo se escriben si están los secrets (hace falta para crearlo la
+      # primera vez, o para rotar el token).
+      - name: Deploy
+        env:
+          MCP_TOKEN: ${{ secrets.MCP_TOKEN }}
+          ENTRENADOR_UID: ${{ secrets.ENTRENADOR_UID }}
+        run: |
+          args=(--image "$IMAGE" --region "$REGION" --project "$PROJECT_ID" --allow-unauthenticated --quiet)
+          if [ -n "$MCP_TOKEN" ] && [ -n "$ENTRENADOR_UID" ]; then
+            args+=(--update-env-vars "MCP_TOKEN=$MCP_TOKEN,ENTRENADOR_UID=$ENTRENADOR_UID")
+          fi
+          gcloud run deploy "$SERVICE" "${args[@]}"
+
+      - name: Health check
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT_ID" --format 'value(status.url)')
+          curl -fsS "$URL/health"

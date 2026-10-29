@@ -75,13 +75,33 @@ MCP_TOKEN=... ENTRENADOR_UID=... FIREBASE_SERVICE_ACCOUNT="$(cat clave.json)" np
 ### Como conector remoto (claude.ai / app de Claude)
 
 Desplegalo en cualquier hosting de Node (el Dockerfile se construye desde la
-raíz del repo porque usa `src/lib`). Por ejemplo, Cloud Run en el mismo
-proyecto de Firebase (ahí no hace falta la clave: usa la cuenta del servicio):
+raíz del repo porque usa `src/lib`). Lo previsto es Cloud Run en el mismo
+proyecto de Firebase (ahí no hace falta la clave: usa la cuenta del servicio).
+
+#### Despliegue automático (GitHub Actions)
+
+`.github/workflows/deploy-mcp.yml` corre los tests y redespliega el servicio en
+cada push a `main` que toque `mcp/` o `src/lib/`. También se corre a mano
+desde Actions → *Deploy MCP to Cloud Run* → *Run workflow*. Necesita:
+
+| En el repo (Settings → Secrets and variables → Actions) | |
+|---|---|
+| Secret `GCP_SA_KEY` | JSON de una cuenta de servicio de GCP con los roles *Cloud Run Admin*, *Artifact Registry Administrator* y *Service Account User* |
+| Secrets `MCP_TOKEN` y `ENTRENADOR_UID` | Opcionales. Sólo hacen falta para crear el servicio la primera vez o para cambiarlos; si no están, el servicio conserva los que tiene |
+| Variables `GCP_PROJECT_ID`, `GCP_REGION`, `MCP_SERVICE` | Opcionales. Default: `entrenador-b3153`, `southamerica-east1`, `entrenador-mcp` |
+
+En el proyecto tienen que estar habilitadas las APIs de Cloud Run y Artifact
+Registry.
+
+#### A mano
 
 ```bash
-gcloud run deploy entrenador-mcp --source . --dockerfile mcp/Dockerfile \
-  --project entrenador-b3153 --region southamerica-east1 --allow-unauthenticated \
-  --set-env-vars ENTRENADOR_UID=...,MCP_TOKEN=...
+REGION=southamerica-east1 PROJECT=entrenador-b3153
+IMAGE=$REGION-docker.pkg.dev/$PROJECT/entrenador/entrenador-mcp:manual
+gcloud auth configure-docker $REGION-docker.pkg.dev
+docker build -f mcp/Dockerfile -t $IMAGE . && docker push $IMAGE
+gcloud run deploy entrenador-mcp --image $IMAGE --project $PROJECT --region $REGION \
+  --allow-unauthenticated --update-env-vars ENTRENADOR_UID=...,MCP_TOKEN=...
 ```
 
 En Claude → Configuración → Conectores → *Agregar conector personalizado*,
@@ -106,6 +126,13 @@ https://<tu-servicio>/mcp/<MCP_TOKEN>
   }
 }
 ```
+
+## Validación estricta
+
+Los argumentos se validan en modo estricto: un campo que el servidor no conoce
+devuelve un error en vez de descartarse. Si Claude manda algo que el servidor
+desplegado todavía no soporta (por ejemplo `alternativas` contra una versión
+vieja), se entera en el momento en lugar de recibir un ok y perder el dato.
 
 ## Convivencia con la app
 
