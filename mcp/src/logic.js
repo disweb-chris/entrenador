@@ -4,7 +4,7 @@
 import {
   DAYS, REST_DEFAULTS, getDateKey, makeEmptySet, sortedExercises, getNextDayKey,
 } from "../../src/lib/constants.js";
-import { withDefaults, seedRoutine, sessionExercisesFromRoutine, variantsOf, findRoutineEntry, switchVariant } from "../../src/lib/routine.js";
+import { withDefaults, seedRoutine, sessionExercisesFromRoutine, variantsOf, findRoutineEntry, switchVariant, syncSessionExercises } from "../../src/lib/routine.js";
 import { computeBests, bestSet, recordStatus, roundKg, latestExerciseData } from "../../src/lib/records.js";
 import { stagnationStatus, stagnationLabel } from "../../src/lib/stagnation.js";
 import { suggestProgression } from "../../src/lib/progression.js";
@@ -181,6 +181,44 @@ export async function targetsFor(store, dateKey) {
   const prevWeek = shiftWeek(dateKey, -1);
   const prev = await store.getTargets(prevWeek);
   return { semana: prevWeek, targets: prev || {}, heredados: !!prev };
+}
+
+/**
+ * Objetivos tal como los muestra la app en una fecha: los de su semana (o los
+ * de la anterior si todavía no hay) con los de la semana siguiente encima.
+ */
+export async function displayedTargets(store, dateKey) {
+  const [own, prev, next] = await Promise.all([
+    store.getTargets(weekKeyOf(dateKey)),
+    store.getTargets(shiftWeek(dateKey, -1)),
+    store.getTargets(shiftWeek(dateKey, 1)),
+  ]);
+  return { ...(own || prev || {}), ...(next || {}) };
+}
+
+/**
+ * Pone al día las sesiones ya creadas de una fecha con la rutina y los
+ * objetivos vigentes (series que faltan y orden), igual que la app al abrirlas.
+ * Devuelve los días de rutina que cambiaron.
+ */
+export async function syncSessionsOf(store, dateKey, { prevTargets = null, dayKey = null } = {}) {
+  const sessions = (await store.getSessionsByDate(dateKey)).filter(s => !dayKey || s.dayKey === dayKey);
+  if (!sessions.length) return [];
+  const [{ days }, targets] = await Promise.all([loadRoutine(store), displayedTargets(store, dateKey)]);
+  const changed = [];
+  for (const s of sessions) {
+    let did = false;
+    await store.updateSession(dateKey, s.dayKey, async current => {
+      did = false;
+      if (!current) return null;
+      const exercises = syncSessionExercises(current.exercises, days[s.dayKey], { targets, prevTargets, dayKey: s.dayKey });
+      if (exercises === current.exercises) return null;
+      did = true;
+      return { ...current, exercises };
+    });
+    if (did) changed.push(s.dayKey);
+  }
+  return changed;
 }
 
 // ── Qué sesión tocar ─────────────────────────────────────────────────────────

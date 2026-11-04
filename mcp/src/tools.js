@@ -7,6 +7,7 @@ import {
   weightToStore, repsToStore, allExerciseNames, recordFor, stagnationFor, toNum,
   computeBests, roundKg, suggestProgression, normalizeTarget, parseRoutineText, sortedExercises,
   getNextDayKey, makeEmptySet, variantsOf, findRoutineEntry, latestExerciseData, routineVariantNames,
+  displayedTargets, syncSessionsOf,
 } from "./logic.js";
 
 // ── Esquemas compartidos ─────────────────────────────────────────────────────
@@ -474,7 +475,7 @@ export function buildServer(store) {
 
   tool(server, "guardar_objetivos", {
     title: "Guardar objetivos",
-    description: "Guarda objetivos (series, reps o reps_por_serie, peso) por ejercicio para una semana. Por defecto se combinan con los existentes; con reemplazar=true la semana queda sólo con éstos. Usá el nombre del ejercicio tal como está en la rutina; una alternativa lleva sus propios objetivos con su nombre.",
+    description: "Guarda objetivos (series, reps o reps_por_serie, peso) por ejercicio para una semana. Si hoy ya hay una sesión creada, se le agregan las series que pida el objetivo. Por defecto se combinan con los existentes; con reemplazar=true la semana queda sólo con éstos. Usá el nombre del ejercicio tal como está en la rutina; una alternativa lleva sus propios objetivos con su nombre.",
     inputSchema: {
       objetivos: z.record(z.string(), objetivo).describe("{ \"Press Plano Máquina\": { \"series\": 3, \"reps\": 12, \"peso\": 35 } }"),
       semana: z.string().optional().describe("ISO, ej '2026-W44'. Default: semana actual"),
@@ -502,13 +503,16 @@ export function buildServer(store) {
       const name = matchName(Object.keys(base), n);
       if (name) delete base[name];
     }
+    const prevTargets = await displayedTargets(store, today());
     await store.overwriteTargets(week, base);
-    return { ok: true, semana: week, renombrados, objetivos: base };
+    // La sesión de hoy ya creada recibe las series que pide el objetivo nuevo.
+    const sesiones_actualizadas = await syncSessionsOf(store, today(), { prevTargets });
+    return { ok: true, semana: week, renombrados, objetivos: base, sesiones_actualizadas };
   });
 
   tool(server, "guardar_rutina_dia", {
     title: "Guardar rutina de un día",
-    description: "Reemplaza la rutina de un día: la lista de ejercicios en orden (el orden del array ES el de la rutina) con tipo, descanso, notas, carga y alternativas. Afecta a las sesiones nuevas, no a las ya creadas. Las alternativas también se reemplazan: para conservar las que había, volvé a mandarlas (leelas antes con rutina). Cada ejercicio o alternativa puede traer un objetivo, que se guarda en la semana actual con su nombre.",
+    description: "Reemplaza la rutina de un día: la lista de ejercicios en orden (el orden del array ES el de la rutina) con tipo, descanso, notas, carga y alternativas. Afecta a las sesiones nuevas y reordena la de hoy de ese día si ya existe (las series hechas no se tocan). Las alternativas también se reemplazan: para conservar las que había, volvé a mandarlas (leelas antes con rutina). Cada ejercicio o alternativa puede traer un objetivo, que se guarda en la semana actual con su nombre.",
     inputSchema: {
       dia: z.string().describe(`Día: ${DAY_LIST}`),
       foco: z.string().optional(),
@@ -539,12 +543,15 @@ export function buildServer(store) {
     if (!routine?.[dayKey]) throw new UserError(errors.join("; ") || "Rutina inválida");
 
     const { days } = await loadRoutine(store);
+    const prevTargets = await displayedTargets(store, today());
     const before = (days[dayKey]?.ejercicios || []).map(e => e.nombre);
     const altsBefore = routineVariantNames(days[dayKey]).filter(n => !before.includes(n));
     const next = { ...days, [dayKey]: { foco: routine[dayKey].foco ?? days[dayKey]?.foco, ejercicios: routine[dayKey].ejercicios } };
     await store.saveRoutine(next);
     const week = weekKeyOf(today());
     if (Object.keys(targets).length) await store.saveTargets(week, targets);
+    // Si ese día ya tiene sesión hoy, toma el orden nuevo y las series del objetivo.
+    const sesiones_actualizadas = await syncSessionsOf(store, today(), { prevTargets, dayKey });
 
     const after = next[dayKey].ejercicios.map(e => e.nombre);
     const altsAfter = routineVariantNames(next[dayKey]).filter(n => !after.includes(n));
@@ -558,6 +565,7 @@ export function buildServer(store) {
       alternativas_quitadas: altsBefore.filter(n => !altsAfter.includes(n)),
       rutina: next[dayKey],
       objetivos_guardados: Object.keys(targets).length ? { semana: week, ejercicios: Object.keys(targets) } : undefined,
+      sesiones_actualizadas,
     };
   });
 
