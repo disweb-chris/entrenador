@@ -301,3 +301,32 @@ test("guardar_rutina_dia reordena la sesión de hoy de ese día", async () => {
   assert.equal(ex["Facepull"].order, 2);
   assert.equal(ex["Jalón Cerrado con V"].sets[0].done, true);
 });
+
+test("renombrar_ejercicio unifica sesiones, objetivos y rutina", async () => {
+  const week = weekKeyOf(today());
+  db._data.get(`targets/${UID}_${week}`).targets["Remo en T apoyado"] = { series: 4 };
+  db._data.get(`sessions/${UID}_2026-10-23_viernes`).exercises["Remo en T apoyado"] = { type: "compound", order: 4, sets: [set(17.5, 14)] };
+  db._data.get(`sessions/${UID}_2026-10-22_jueves`).exercises["Remo con Mancuerna"] = { order: 1.5, variantOf: "Remo en T apoyado", sets: [] };
+
+  const sim = await call("renombrar_ejercicio", { de: ["Remo en T apoyado"], a: "Remo en T Apoyado", simular: true });
+  assert.equal(sim.sesiones.length, 2);
+  assert.ok(doc(`${UID}_2026-10-23_viernes`).exercises["Remo en T apoyado"], "simular no escribe");
+
+  const r = await call("renombrar_ejercicio", { de: ["Remo en T apoyado"], a: "Remo en T Apoyado" });
+  assert.equal(r.objetivos.length, 1);
+  const vie = doc(`${UID}_2026-10-23_viernes`).exercises;
+  assert.equal(vie["Remo en T apoyado"], undefined);
+  // Ya estaba "Remo en T Apoyado" en esa sesión: se juntan las series en el primer lugar.
+  assert.equal(vie["Remo en T Apoyado"].sets.length, 3);
+  assert.equal(vie["Remo en T Apoyado"].order, 3);
+  assert.equal(doc(`${UID}_2026-10-22_jueves`).exercises["Remo con Mancuerna"].variantOf, "Remo en T Apoyado");
+  const tg = db._data.get(`targets/${UID}_${week}`).targets;
+  assert.equal(tg["Remo en T apoyado"], undefined);
+  assert.equal(tg["Remo en T Apoyado"].series, 4);
+});
+
+test("renombrar_ejercicio no deja dos iguales en la rutina", async () => {
+  const r = await call("renombrar_ejercicio", { de: ["Remo en T Apoyado"], a: "Jalón Cerrado con V" });
+  assert.match(r.error, /dos/);
+  assert.ok(doc(`${UID}_2026-10-22_jueves`).exercises["Remo en T Apoyado"]);
+});

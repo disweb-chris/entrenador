@@ -7,7 +7,7 @@ import {
   weightToStore, repsToStore, allExerciseNames, recordFor, stagnationFor, toNum,
   computeBests, roundKg, suggestProgression, normalizeTarget, parseRoutineText, sortedExercises,
   getNextDayKey, makeEmptySet, variantsOf, findRoutineEntry, latestExerciseData, routineVariantNames,
-  displayedTargets, syncSessionsOf,
+  displayedTargets, syncSessionsOf, renameExercise,
 } from "./logic.js";
 
 // ── Esquemas compartidos ─────────────────────────────────────────────────────
@@ -509,6 +509,17 @@ export function buildServer(store) {
     const sesiones_actualizadas = await syncSessionsOf(store, today(), { prevTargets });
     return { ok: true, semana: week, renombrados, objetivos: base, sesiones_actualizadas };
   });
+
+  tool(server, "renombrar_ejercicio", {
+    title: "Renombrar ejercicio en todo el historial",
+    description: "Unifica nombres distintos de un mismo ejercicio (ej. 'Abdominal' y 'Abdominal Maquina' → 'Abdominal Máquina') en todas las sesiones, los objetivos de todas las semanas y la rutina, para que historial, récords y progresión queden en uno. Los nombres de 'de' son exactos (distingue mayúsculas y tildes). Usá simular=true para ver qué cambiaría sin escribir.",
+    inputSchema: {
+      de: z.array(z.string().min(1)).min(1).describe("Nombres exactos a reemplazar"),
+      a: z.string().min(1).describe("Nombre final"),
+      simular: z.boolean().default(false),
+    },
+    annotations: DESTRUCTIVE,
+  }, async ({ de, a, simular = false }) => renameExercise(store, de, a.trim(), { simular }));
 
   tool(server, "guardar_rutina_dia", {
     title: "Guardar rutina de un día",
