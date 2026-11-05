@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { DAYS, getDateKey, getTodayDayKey, getNextDayKey, sortedExercises, makeEmptySet, Z } from "../lib/constants";
-import { withDefaults, seedRoutine, sessionExercisesFromRoutine, findRoutineEntry, switchVariant } from "../lib/routine";
+import { withDefaults, seedRoutine, sessionExercisesFromRoutine, findRoutineEntry, switchVariant, syncSessionExercises } from "../lib/routine";
 import { saveSession, getSession, getSessionForDay, getLastSession, getTargets, overwriteTargets, getRecentSessions, exerciseHistoryFrom, setUserProfile, getRoutine, saveRoutine } from "../lib/db";
 import { generateReport, getWeekKey } from "../lib/report";
 import { useRestTimer, useSessionTimer } from "../hooks/useTimer";
@@ -87,18 +87,50 @@ export default function SessionView({ user, profile, onSignOut }) {
   // La sesión también se escribe desde afuera (el MCP). Al volver a la app se
   // relee: si no, la próxima edición guardaría el estado en memoria y pisaría
   // esas series. Sólo sin ediciones pendientes, que son más nuevas que la DB.
+  // Lo mismo con objetivos y rutina: si Claude los cambió mientras la app
+  // estaba en segundo plano, la sesión se pone al día (series y orden) sin
+  // tener que recargar ni tocar nada.
   useEffect(() => {
     async function refresh() {
       if (document.visibilityState !== "visible" || pendingRef.current || !activeDay) return;
-      const remote = await getSession(user.uid, activeDateKey, activeDay).catch(() => null);
-      if (!remote || pendingRef.current) return;
-      skipSaveRef.current = true;
-      setSession(remote);
-      setSessionNotes(remote.sessionNotes || "");
+      const [remote, days, tg] = await Promise.all([
+        getSession(user.uid, activeDateKey, activeDay).catch(() => null),
+        getRoutine(user.uid).catch(() => null),
+        fetchTargets().catch(() => null),
+      ]);
+      if (pendingRef.current) return;
+      if (days) {
+        const next = withDefaults(days);
+        // Una rutina distinta vuelve a cargar el día entero (efecto de carga).
+        if (JSON.stringify(next) !== JSON.stringify(routine)) { setRoutine(next); return; }
+      }
+      if (tg) setTargets(tg.merged);
+      const isToday = activeDateKey === dateKey;
+      const sync = exercises => (isToday && tg)
+        ? syncSessionExercises(exercises, routine?.[activeDay], { targets: tg.merged, dayKey: activeDay })
+        : exercises;
+      if (remote) {
+        const exercises = sync(remote.exercises);
+        const fresh = exercises === remote.exercises ? remote : { ...remote, exercises };
+        if (fresh !== remote) {
+          saveSession(user.uid, activeDateKey, activeDay, fresh)
+            .catch(err => console.error("Error guardando sesión:", err));
+        }
+        skipSaveRef.current = true;
+        setSession(fresh);
+        setSessionNotes(fresh.sessionNotes || "");
+      } else {
+        // Sesión todavía sin guardar: se acomoda en memoria y sigue sin escribirse.
+        setSession(prev => {
+          if (!prev) return prev;
+          const exercises = sync(prev.exercises);
+          return exercises === prev.exercises ? prev : { ...prev, exercises };
+        });
+      }
     }
     document.addEventListener("visibilitychange", refresh);
     return () => document.removeEventListener("visibilitychange", refresh);
-  }, [user.uid, activeDay, activeDateKey]);
+  }, [user.uid, activeDay, activeDateKey, routine]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeDay) { setLoading(false); return; }
@@ -141,6 +173,24 @@ export default function SessionView({ user, profile, onSignOut }) {
   }, [user.uid, recent]);
 
   /**
+   * Objetivos que muestra la app: los de esta semana (o, si todavía no hay, los
+   * de la anterior) con los de la próxima encima, que es donde Claude deja los
+   * que salen del informe de la última sesión.
+   */
+  async function fetchTargets() {
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    const [current, next, last] = await Promise.all([
+      getTargets(user.uid, getWeekKey()),
+      getTargets(user.uid, getWeekKey(nextWeek)),
+      getTargets(user.uid, getWeekKey(lastWeek)),
+    ]);
+    return { merged: { ...(current || last || {}), ...(next || {}) } };
+  }
+
+  /**
    * Carga una sesión. Sin `targetDate` es la de hoy; con `targetDate` es una
    * sesión pasada, que se abre editable para poder corregirla.
    */
@@ -149,16 +199,10 @@ export default function SessionView({ user, profile, onSignOut }) {
     setLoading(true);
     const viewingDate = targetDate || dateKey;
     const isPast = viewingDate !== dateKey;
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    const lastWeek = new Date();
-    lastWeek.setDate(lastWeek.getDate() - 7);
-    const [snap, tgts, nextTgts, lastTgts] = await Promise.all([
+    const [snap, { merged: dayTargets }] = await Promise.all([
       isPast ? getSession(user.uid, viewingDate, dayKey)
              : getSessionForDay(user.uid, dateKey, dayKey),
-      getTargets(user.uid, getWeekKey()),
-      getTargets(user.uid, getWeekKey(nextWeek)),
-      getTargets(user.uid, getWeekKey(lastWeek)),
+      fetchTargets(),
     ]);
 
     // Only use a saved session if it belongs to the date being viewed; older
@@ -169,15 +213,26 @@ export default function SessionView({ user, profile, onSignOut }) {
     skipSaveRef.current = true; // lo que viene de la DB no hay que re-escribirlo
     touchedRef.current = false;
     if (loaded) {
-      setSession(loaded);
+      // La sesión de hoy se pone al día con los objetivos y la rutina vigentes:
+      // si cambiaron después de crearla, faltaban series o quedaba otro orden.
+      // Una sesión pasada es historial y no se toca.
+      let current = loaded;
+      if (!isPast) {
+        const exercises = syncSessionExercises(loaded.exercises, routine?.[dayKey], { targets: dayTargets, dayKey });
+        if (exercises !== loaded.exercises) {
+          current = { ...loaded, exercises };
+          saveSession(user.uid, viewingDate, dayKey, current)
+            .catch(err => console.error("Error guardando sesión:", err));
+        }
+      }
+      setSession(current);
       setActiveDateKey(viewingDate);
-      setSessionNotes(loaded.sessionNotes || "");
+      setSessionNotes(current.sessionNotes || "");
     } else {
       // La sesión se arma desde la rutina del usuario: orden, tipo, descanso y
       // cuántas series pre-crear salen de ahí.
-      const baseTargets = tgts || lastTgts || {};
       setSession({
-        exercises: sessionExercisesFromRoutine(routine?.[dayKey], { lastSession: last, targets: baseTargets }),
+        exercises: sessionExercisesFromRoutine(routine?.[dayKey], { lastSession: last, targets: dayTargets }),
         sessionNotes: "",
       });
       setActiveDateKey(viewingDate);
@@ -185,9 +240,7 @@ export default function SessionView({ user, profile, onSignOut }) {
     }
 
     setLastSession(last);
-    // Si no hay targets esta semana, usar los de la semana pasada como base
-    const baseTgts = tgts || lastTgts || {};
-    setTargets({ ...baseTgts, ...(nextTgts || {}) });
+    setTargets(dayTargets);
     setLoading(false);
   }
 
@@ -343,16 +396,29 @@ export default function SessionView({ user, profile, onSignOut }) {
     });
   }
 
-  function handleTargetChange(exName, updated) {
-    const newTargets = { ...(targets || {}), [exName]: updated };
+  // Cambiar un objetivo arma las series de la sesión de hoy: pasar de 3 a 4
+  // series agrega la que falta, sin volver a la pestaña HOY a tocar "+ SERIE".
+  function applyTargets(newTargets) {
+    const prevTargets = targets || {};
     setTargets(newTargets);
     overwriteTargets(user.uid, getWeekKey(), newTargets);
+    if (activeDateKey !== dateKey || !activeDay) return;
+    setSession(prev => {
+      if (!prev) return prev;
+      const exercises = syncSessionExercises(prev.exercises, routine?.[activeDay], { targets: newTargets, prevTargets, dayKey: activeDay });
+      if (exercises === prev.exercises) return prev;
+      touchedRef.current = true;
+      return { ...prev, exercises };
+    });
+  }
+
+  function handleTargetChange(exName, updated) {
+    applyTargets({ ...(targets || {}), [exName]: updated });
   }
 
   function handleTargetRemove(exName) {
     const { [exName]: _, ...rest } = (targets || {});
-    setTargets(rest);
-    overwriteTargets(user.uid, getWeekKey(), rest);
+    applyTargets(rest);
   }
 
   /**
@@ -375,9 +441,7 @@ export default function SessionView({ user, profile, onSignOut }) {
   }
 
   function handleTargetsMerge(newTargets) {
-    const merged = { ...(targets || {}), ...newTargets };
-    setTargets(merged);
-    overwriteTargets(user.uid, getWeekKey(), merged);
+    applyTargets({ ...(targets || {}), ...newTargets });
   }
 
   const dayInfo = DAYS.find(d => d.key === activeDay);

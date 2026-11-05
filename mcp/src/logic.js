@@ -4,7 +4,7 @@
 import {
   DAYS, REST_DEFAULTS, getDateKey, makeEmptySet, sortedExercises, getNextDayKey,
 } from "../../src/lib/constants.js";
-import { withDefaults, seedRoutine, sessionExercisesFromRoutine, variantsOf, findRoutineEntry, switchVariant } from "../../src/lib/routine.js";
+import { withDefaults, seedRoutine, sessionExercisesFromRoutine, variantsOf, findRoutineEntry, switchVariant, syncSessionExercises } from "../../src/lib/routine.js";
 import { computeBests, bestSet, recordStatus, roundKg, latestExerciseData } from "../../src/lib/records.js";
 import { stagnationStatus, stagnationLabel } from "../../src/lib/stagnation.js";
 import { suggestProgression } from "../../src/lib/progression.js";
@@ -181,6 +181,133 @@ export async function targetsFor(store, dateKey) {
   const prevWeek = shiftWeek(dateKey, -1);
   const prev = await store.getTargets(prevWeek);
   return { semana: prevWeek, targets: prev || {}, heredados: !!prev };
+}
+
+/**
+ * Objetivos tal como los muestra la app en una fecha: los de su semana (o los
+ * de la anterior si todavía no hay) con los de la semana siguiente encima.
+ */
+export async function displayedTargets(store, dateKey) {
+  const [own, prev, next] = await Promise.all([
+    store.getTargets(weekKeyOf(dateKey)),
+    store.getTargets(shiftWeek(dateKey, -1)),
+    store.getTargets(shiftWeek(dateKey, 1)),
+  ]);
+  return { ...(own || prev || {}), ...(next || {}) };
+}
+
+/**
+ * Pone al día las sesiones ya creadas de una fecha con la rutina y los
+ * objetivos vigentes (series que faltan y orden), igual que la app al abrirlas.
+ * Devuelve los días de rutina que cambiaron.
+ */
+export async function syncSessionsOf(store, dateKey, { prevTargets = null, dayKey = null } = {}) {
+  const sessions = (await store.getSessionsByDate(dateKey)).filter(s => !dayKey || s.dayKey === dayKey);
+  if (!sessions.length) return [];
+  const [{ days }, targets] = await Promise.all([loadRoutine(store), displayedTargets(store, dateKey)]);
+  const changed = [];
+  for (const s of sessions) {
+    let did = false;
+    await store.updateSession(dateKey, s.dayKey, async current => {
+      did = false;
+      if (!current) return null;
+      const exercises = syncSessionExercises(current.exercises, days[s.dayKey], { targets, prevTargets, dayKey: s.dayKey });
+      if (exercises === current.exercises) return null;
+      did = true;
+      return { ...current, exercises };
+    });
+    if (did) changed.push(s.dayKey);
+  }
+  return changed;
+}
+
+// ── Renombrar en todo el historial ───────────────────────────────────────────
+
+/**
+ * Unifica nombres de un mismo ejercicio ("Abdominal", "Abdominal Maquina" →
+ * "Abdominal Máquina"). El nombre es la clave del historial, los récords y los
+ * objetivos: con dos nombres, cada uno lleva su progresión por separado.
+ *
+ * Toca sesiones (clave del ejercicio y `variantOf`), objetivos de todas las
+ * semanas y la rutina. Si en una sesión ya están los dos nombres, las series
+ * se juntan bajo el final; en los objetivos manda el que ya tenía el nombre
+ * final. Con `simular` sólo informa qué cambiaría.
+ */
+export async function renameExercise(store, from, to, { simular = false } = {}) {
+  const sources = [...new Set(from.map(n => String(n).trim()).filter(Boolean))].filter(n => n !== to);
+  if (!to || !to.trim()) throw new UserError("Falta el nombre final");
+  if (!sources.length) throw new UserError("No hay nombres para renombrar");
+  const isSource = n => sources.includes(n);
+  const report = { a: to, de: sources, sesiones: [], objetivos: [], rutina: [], simulado: simular };
+
+  // Rutina primero: si el cambio deja un día con dos ejercicios iguales, no se escribe nada.
+  const stored = await store.getRoutine();
+  let routine = null;
+  if (stored) {
+    routine = structuredClone(stored);
+    for (const [dayKey, day] of Object.entries(routine)) {
+      const rename = e => {
+        if (isSource(e.nombre)) { report.rutina.push(`${dayKey}: ${e.nombre}`); e.nombre = to; }
+      };
+      for (const e of day?.ejercicios || []) { rename(e); (e.alternativas || []).forEach(rename); }
+      const names = (day?.ejercicios || []).flatMap(e => [e.nombre, ...(e.alternativas || []).map(a => a.nombre)]);
+      if (names.filter(n => n === to).length > 1) {
+        throw new UserError(`En la rutina del ${dayKey} quedarían dos "${to}". Corregí la rutina primero.`);
+      }
+    }
+  }
+
+  const sessions = await store.getAllSessions();
+  const sessionWrites = [];
+  for (const s of sessions) {
+    const exercises = s.exercises || {};
+    const names = Object.keys(exercises);
+    const hits = names.filter(isSource);
+    const variantHits = names.filter(n => isSource(exercises[n]?.variantOf));
+    if (!hits.length && !variantHits.length) continue;
+    const next = {};
+    for (const [name, ex] of Object.entries(exercises)) {
+      const fixed = isSource(ex?.variantOf) ? { ...ex, variantOf: to } : ex;
+      if (!isSource(name)) { next[name] = next[name] ? mergeExercise(next[name], fixed) : fixed; continue; }
+      next[to] = next[to] ? mergeExercise(next[to], fixed) : fixed;
+    }
+    // Un principal renombrado a sí mismo como variante no tiene sentido.
+    if (next[to]?.variantOf === to) { const { variantOf, ...rest } = next[to]; next[to] = rest; }
+    report.sesiones.push(`${s.dateKey} ${s.dayKey}: ${hits.join(", ") || "(alternativa_de)"}`);
+    sessionWrites.push({ ...s, exercises: next });
+  }
+
+  const weeks = await store.listTargets();
+  const targetWrites = [];
+  for (const w of weeks) {
+    const t = w.targets || {};
+    const hits = Object.keys(t).filter(isSource);
+    if (!hits.length) continue;
+    const next = { ...t };
+    for (const n of hits) {
+      if (next[to] == null) next[to] = t[n];
+      delete next[n];
+    }
+    report.objetivos.push(`${w.weekKey}: ${hits.join(", ")}`);
+    targetWrites.push({ weekKey: w.weekKey, targets: next });
+  }
+
+  if (!simular) {
+    if (routine && report.rutina.length) await store.saveRoutine(routine);
+    for (const s of sessionWrites) await store.saveSession(s.dateKey, s.dayKey, s);
+    for (const w of targetWrites) await store.overwriteTargets(w.weekKey, w.targets);
+  }
+  return report;
+}
+
+/** Junta dos registros del mismo ejercicio en una sesión: series de ambos, el primer lugar. */
+function mergeExercise(a, b) {
+  const order = [a?.order, b?.order].filter(o => o != null);
+  return {
+    ...b, ...a,
+    sets: [...(a?.sets || []), ...(b?.sets || [])],
+    ...(order.length ? { order: Math.min(...order) } : {}),
+  };
 }
 
 // ── Qué sesión tocar ─────────────────────────────────────────────────────────

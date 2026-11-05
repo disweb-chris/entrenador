@@ -72,6 +72,22 @@ export function createStore(db, uid) {
       return snap.empty ? null : snap.docs[0].data();
     },
 
+    /** Todas las sesiones del usuario, sin orden. Para cambios sobre el historial completo. */
+    async getAllSessions() {
+      const snap = await db.collection("sessions").where("uid", "==", uid).get();
+      return snap.docs.map(d => d.data());
+    },
+
+    async saveSession(dateKey, dayKey, data) {
+      await sessionRef(dateKey, dayKey).set({ ...data, uid, dateKey, dayKey, updatedAt: Date.now() });
+    },
+
+    /** Todas las semanas con objetivos: [{ weekKey, targets }]. */
+    async listTargets() {
+      const snap = await db.collection("targets").where("uid", "==", uid).get();
+      return snap.docs.map(d => d.data()).filter(d => d.weekKey);
+    },
+
     async getTargets(weekKey) {
       const snap = await targetsRef(weekKey).get();
       return snap.exists ? (snap.data().targets || null) : null;

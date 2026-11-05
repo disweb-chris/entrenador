@@ -1,4 +1,4 @@
-import { DAYS, DEFAULT_EXERCISES, REST_DEFAULTS, makeEmptySet } from "./constants.js";
+import { DAYS, DEFAULT_EXERCISES, REST_DEFAULTS, makeEmptySet, sortedExercises } from "./constants.js";
 
 // La rutina vivía hardcodeada en DEFAULT_EXERCISES: cambiar un ejercicio, el
 // orden o un descanso de forma permanente exigía tocar código y desplegar. Acá
@@ -127,6 +127,88 @@ export function findRoutineEntry(dayRoutine, name, variantOf = null) {
 }
 
 const hasDone = ex => (ex?.sets || []).some(s => s.done);
+
+/** Posición en la rutina del lugar al que pertenece un ejercicio; -1 si no está. */
+function slotIndex(dayRoutine, name, variantOf = null) {
+  return (dayRoutine?.ejercicios || []).findIndex(entry =>
+    variantOf ? entry.nombre === variantOf : variantsOf(entry).some(v => v.nombre === name));
+}
+
+/** Series que pide un objetivo, o null si no dice cuántas. */
+function targetSeries(t) {
+  const n = parseInt(t?.series);
+  return n >= 1 ? Math.min(n, 10) : null;
+}
+
+/**
+ * Pone una sesión ya creada al día con la rutina y los objetivos vigentes.
+ *
+ * Las series se pre-crean al nacer la sesión, y el orden también sale de la
+ * rutina en ese momento. Si después llegan objetivos nuevos (los guarda Claude,
+ * se pegan, empieza la semana) o la rutina cambia, la sesión abierta no se
+ * enteraba y había que agregar series y reacomodar a mano.
+ *
+ *  - Series: si el objetivo pide más de las que hay, se agregan vacías. Sólo
+ *    se quitan cuando el objetivo de ESE ejercicio cambió (`prevTargets`), y
+ *    nunca una serie hecha: una serie extra agregada a mano no desaparece
+ *    porque se recargue la app.
+ *  - Orden: el de la rutina. Una alternativa ocupa el lugar de su principal y
+ *    un ejercicio agregado a mano sigue después de los de la rutina que tenía
+ *    antes (si estaba al final, queda al final).
+ *
+ * Devuelve el mismo objeto si no hay nada que cambiar, para no guardar de más.
+ */
+export function syncSessionExercises(exercises, dayRoutine, { targets, prevTargets = null, dayKey } = {}) {
+  if (!exercises) return exercises;
+  const entries = sortedExercises(exercises, dayKey);
+  const slots = new Map(entries.map(([name, ex]) => [name, slotIndex(dayRoutine, name, ex?.variantOf)]));
+
+  // Un lugar con dos ejercicios es un cambio de máquina a mitad de camino: las
+  // series ya se repartieron entre los dos y completarlas duplicaría trabajo.
+  const perSlot = new Map();
+  for (const idx of slots.values()) if (idx >= 0) perSlot.set(idx, (perSlot.get(idx) || 0) + 1);
+
+  let changed = false;
+  const out = {};
+  for (const [name, ex] of entries) {
+    const want = targetSeries(targets?.[name]);
+    const current = ex?.sets || [];
+    let sets = current;
+    if (want != null && !(perSlot.get(slots.get(name)) > 1)) {
+      if (current.length < want) {
+        sets = [...current, ...Array.from({ length: want - current.length }, makeEmptySet)];
+      } else if (current.length > want && prevTargets && targetSeries(prevTargets[name]) !== want) {
+        let end = current.length;
+        while (end > want && !current[end - 1]?.done) end--;
+        sets = current.slice(0, end);
+      }
+    }
+    if (sets.length !== current.length) {
+      changed = true;
+      out[name] = { ...ex, sets };
+    } else {
+      out[name] = ex;
+    }
+  }
+
+  if (dayRoutine?.ejercicios?.length) {
+    let anchor = -1;
+    const keyed = entries.map(([name], i) => {
+      const idx = slots.get(name);
+      if (idx >= 0) { anchor = Math.max(anchor, idx); return { name, k: [idx, 0, i] }; }
+      return { name, k: [anchor, 1, i] };
+    });
+    keyed.sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2]);
+    keyed.forEach(({ name }, order) => {
+      if (out[name]?.order !== order) {
+        changed = true;
+        out[name] = { ...out[name], order };
+      }
+    });
+  }
+
+  return changed ? out : exercises;
+}
 
 /**
  * Cambia un ejercicio de la sesión por otra de sus variantes, en el mismo

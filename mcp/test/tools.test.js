@@ -261,3 +261,72 @@ test("un campo desconocido es un error y no se descarta en silencio", async () =
   const top = await client.callTool({ name: "rutina", arguments: { dia: "jueves", extra: 1 } });
   assert.equal(top.isError, true);
 });
+
+test("guardar_objetivos agrega a la sesión de hoy las series que pide el objetivo", async () => {
+  const id = `${UID}_${today()}_jueves`;
+  db._data.set(`sessions/${id}`, { uid: UID, dateKey: today(), dayKey: "jueves", sessionNotes: "", exercises: {
+    "Jalón Cerrado con V": { type: "compound", order: 0, restTime: 130, notes: "", sets: [set(145, 13), empty(), empty()] },
+    "Remo en T Apoyado": { type: "compound", order: 1, restTime: 120, notes: "", sets: [empty()] },
+  } });
+  const r = await call("guardar_objetivos", { objetivos: { "Remo en T Apoyado": { series: 4, reps: 12, peso: 22.5 } } });
+  assert.deepEqual(r.sesiones_actualizadas, ["jueves"]);
+  assert.equal(doc(id).exercises["Remo en T Apoyado"].sets.length, 4);
+  // Al que no le cambió el objetivo no se le tocan las series.
+  assert.equal(doc(id).exercises["Jalón Cerrado con V"].sets.length, 3);
+
+  // Bajar el objetivo quita las vacías del final, nunca una hecha.
+  doc(id).exercises["Remo en T Apoyado"].sets[0] = set(22.5, 12);
+  await call("guardar_objetivos", { objetivos: { "Remo en T Apoyado": { series: 2 } } });
+  const sets = doc(id).exercises["Remo en T Apoyado"].sets;
+  assert.equal(sets.length, 2);
+  assert.equal(sets[0].done, true);
+});
+
+test("guardar_rutina_dia reordena la sesión de hoy de ese día", async () => {
+  const id = `${UID}_${today()}_jueves`;
+  db._data.set(`sessions/${id}`, { uid: UID, dateKey: today(), dayKey: "jueves", sessionNotes: "", exercises: {
+    "Jalón Cerrado con V": { type: "compound", order: 0, restTime: 130, notes: "", sets: [set(145, 13), empty(), empty()] },
+    "Remo en T Apoyado": { type: "compound", order: 1, restTime: 120, notes: "", sets: [empty(), empty(), empty()] },
+    "Facepull": { type: "isolation", order: 2, restTime: 60, notes: "", sets: [empty()] },
+  } });
+  const r = await call("guardar_rutina_dia", { dia: "jueves", ejercicios: [
+    { nombre: "Remo en T Apoyado", tipo: "compound" },
+    { nombre: "Jalón Cerrado con V", tipo: "compound" },
+  ] });
+  assert.deepEqual(r.sesiones_actualizadas, ["jueves"]);
+  const ex = doc(id).exercises;
+  assert.equal(ex["Remo en T Apoyado"].order, 0);
+  assert.equal(ex["Jalón Cerrado con V"].order, 1);
+  // El agregado a mano al final sigue al final.
+  assert.equal(ex["Facepull"].order, 2);
+  assert.equal(ex["Jalón Cerrado con V"].sets[0].done, true);
+});
+
+test("renombrar_ejercicio unifica sesiones, objetivos y rutina", async () => {
+  const week = weekKeyOf(today());
+  db._data.get(`targets/${UID}_${week}`).targets["Remo en T apoyado"] = { series: 4 };
+  db._data.get(`sessions/${UID}_2026-10-23_viernes`).exercises["Remo en T apoyado"] = { type: "compound", order: 4, sets: [set(17.5, 14)] };
+  db._data.get(`sessions/${UID}_2026-10-22_jueves`).exercises["Remo con Mancuerna"] = { order: 1.5, variantOf: "Remo en T apoyado", sets: [] };
+
+  const sim = await call("renombrar_ejercicio", { de: ["Remo en T apoyado"], a: "Remo en T Apoyado", simular: true });
+  assert.equal(sim.sesiones.length, 2);
+  assert.ok(doc(`${UID}_2026-10-23_viernes`).exercises["Remo en T apoyado"], "simular no escribe");
+
+  const r = await call("renombrar_ejercicio", { de: ["Remo en T apoyado"], a: "Remo en T Apoyado" });
+  assert.equal(r.objetivos.length, 1);
+  const vie = doc(`${UID}_2026-10-23_viernes`).exercises;
+  assert.equal(vie["Remo en T apoyado"], undefined);
+  // Ya estaba "Remo en T Apoyado" en esa sesión: se juntan las series en el primer lugar.
+  assert.equal(vie["Remo en T Apoyado"].sets.length, 3);
+  assert.equal(vie["Remo en T Apoyado"].order, 3);
+  assert.equal(doc(`${UID}_2026-10-22_jueves`).exercises["Remo con Mancuerna"].variantOf, "Remo en T Apoyado");
+  const tg = db._data.get(`targets/${UID}_${week}`).targets;
+  assert.equal(tg["Remo en T apoyado"], undefined);
+  assert.equal(tg["Remo en T Apoyado"].series, 4);
+});
+
+test("renombrar_ejercicio no deja dos iguales en la rutina", async () => {
+  const r = await call("renombrar_ejercicio", { de: ["Remo en T Apoyado"], a: "Jalón Cerrado con V" });
+  assert.match(r.error, /dos/);
+  assert.ok(doc(`${UID}_2026-10-22_jueves`).exercises["Remo en T Apoyado"]);
+});
