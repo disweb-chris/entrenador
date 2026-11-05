@@ -273,7 +273,7 @@ export async function renameExercise(store, from, to, { simular = false } = {}) 
     }
     // Un principal renombrado a sí mismo como variante no tiene sentido.
     if (next[to]?.variantOf === to) { const { variantOf, ...rest } = next[to]; next[to] = rest; }
-    report.sesiones.push(`${s.dateKey} ${s.dayKey}: ${hits.join(", ") || "(alternativa_de)"}`);
+    report.sesiones.push(`${s._id}: ${hits.join(", ") || "(alternativa_de)"}`);
     sessionWrites.push({ ...s, exercises: next });
   }
 
@@ -294,7 +294,7 @@ export async function renameExercise(store, from, to, { simular = false } = {}) 
 
   if (!simular) {
     if (routine && report.rutina.length) await store.saveRoutine(routine);
-    for (const s of sessionWrites) await store.saveSession(s.dateKey, s.dayKey, s);
+    for (const s of sessionWrites) await store.saveSessionById(s._id, s);
     for (const w of targetWrites) await store.overwriteTargets(w.weekKey, w.targets);
   }
   return report;

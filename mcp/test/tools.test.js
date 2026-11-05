@@ -330,3 +330,17 @@ test("renombrar_ejercicio no deja dos iguales en la rutina", async () => {
   assert.match(r.error, /dos/);
   assert.ok(doc(`${UID}_2026-10-22_jueves`).exercises["Remo en T Apoyado"]);
 });
+
+test("renombrar_ejercicio reescribe cada sesión en su propio documento", async () => {
+  // Documento viejo con id de lunes pero dayKey "martes", y el martes real al lado.
+  db._data.set(`sessions/${UID}_2026-06-22_lunes`, { uid: UID, dateKey: "2026-06-22", dayKey: "martes", exercises: {
+    "Abdominal": { sets: [set(130, 20)] },
+  } });
+  db._data.set(`sessions/${UID}_2026-06-22_martes`, { uid: UID, dateKey: "2026-06-22", dayKey: "martes", exercises: {
+    "Copa": { sets: [set(16, 15)] },
+  } });
+  const r = await call("renombrar_ejercicio", { de: ["Abdominal"], a: "Abdominal Máquina" });
+  assert.deepEqual(r.sesiones, [`${UID}_2026-06-22_lunes: Abdominal`]);
+  assert.ok(doc(`${UID}_2026-06-22_lunes`).exercises["Abdominal Máquina"]);
+  assert.deepEqual(Object.keys(doc(`${UID}_2026-06-22_martes`).exercises), ["Copa"]);
+});
