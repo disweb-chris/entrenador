@@ -72,14 +72,22 @@ export function createStore(db, uid) {
       return snap.empty ? null : snap.docs[0].data();
     },
 
-    /** Todas las sesiones del usuario, sin orden. Para cambios sobre el historial completo. */
+    /**
+     * Todas las sesiones del usuario, sin orden, con el id real del documento
+     * en `_id`. Hay documentos viejos cuyo id no coincide con su fecha y día
+     * (ej. id de lunes con dayKey "martes"): reescribirlos por fecha y día
+     * pisaría otro documento.
+     */
     async getAllSessions() {
       const snap = await db.collection("sessions").where("uid", "==", uid).get();
-      return snap.docs.map(d => d.data());
+      return snap.docs.map(d => ({ ...d.data(), _id: d.id }));
     },
 
-    async saveSession(dateKey, dayKey, data) {
-      await sessionRef(dateKey, dayKey).set({ ...data, uid, dateKey, dayKey, updatedAt: Date.now() });
+    /** Reescribe una sesión en su propio documento, el de `id`. */
+    async saveSessionById(id, data) {
+      const { _id, ...rest } = data;
+      if (!String(id).startsWith(`${uid}_`)) throw new Error(`La sesión ${id} no es de este usuario`);
+      await db.collection("sessions").doc(id).set({ ...rest, uid, updatedAt: Date.now() });
     },
 
     /** Todas las semanas con objetivos: [{ weekKey, targets }]. */
